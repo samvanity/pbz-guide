@@ -241,6 +241,14 @@ def chapter_page(ch, idx):
   <div><h3>{e(notice['title'])}</h3><p>{notice['text']}</p></div>
 </div>"""
     hero_class = "chapter-hero plate-hero" if ch["hero"].startswith("chapter-bg-") else "chapter-hero"
+    toc_links = f'''
+    <a href="#route"><span class="i">00</span>路線圖</a>
+    <a href="#timeline"><span class="i">01</span>時間軸・易錯過</a>
+    {''.join(f'<a class="toc-sub" href="#s{i+1}">{i+1:02d}　{e(s["title"])}</a>' for i, s in enumerate(ch['stops']))}
+    <a href="#bosses"><span class="i">02</span>頭目攻略</a>
+    {''.join(f'<a class="toc-sub" href="#b{i+1}">{i+1:02d}　{e(b["name"])}</a>' for i, b in enumerate(ch['bosses']))}
+    <a href="#checklist"><span class="i">03</span>離開前檢查</a>
+    '''
     return head(f"{ch['name']}｜影之刃零 攻略", ch["tagline"]) + f"""
 <section class="{hero_class}">
   <div class="bg">{img(ch['hero'], 'hero-creek.jpg', ch['name'])}</div>
@@ -254,18 +262,17 @@ def chapter_page(ch, idx):
   </div>
 </section>
 <div class="wrap chapter-layout">
-  <aside class="toc">
+  <aside class="toc" aria-label="本章目錄">
     <div class="toc-title">本章目錄</div>
-    <a href="#route"><span class="i">00</span>路線圖</a>
-    <a href="#timeline"><span class="i">01</span>時間軸・易錯過</a>
-    {''.join(f'<a class="toc-sub" href="#s{i+1}">{i+1:02d}　{e(s["title"])}</a>' for i, s in enumerate(ch['stops']))}
-    <a href="#bosses"><span class="i">02</span>頭目攻略</a>
-    {''.join(f'<a class="toc-sub" href="#b{i+1}">{i+1:02d}　{e(b["name"])}</a>' for i, b in enumerate(ch['bosses']))}
-    <a href="#checklist"><span class="i">03</span>離開前檢查</a>
+    {toc_links}
     <div class="back"><a href="index.html">← 回到章節索引</a></div>
   </aside>
   <main class="chapter-content">
     {notice_html}
+    <details class="toc-mobile">
+      <summary>本章目錄・時間軸／頭目／檢查</summary>
+      <div class="toc-mobile-links">{toc_links}</div>
+    </details>
     <section id="route">
       <div class="content-head"><h2><small>路線</small>本章路線</h2><span class="count">{miss_count} 個易錯過・{boss_count} 個頭目</span></div>
       {map_block}
