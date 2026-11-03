@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="zh-Hant-TW">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>蜃樓莊園 Mirage Estate ＋ 赤林收尾｜影之刃零 攻略</title>
-<meta name="description" content="從 Green Serpent House 的門進入。&lt;b&gt;踏進 Mirage Estate 就是不歸點&lt;/b&gt;：Meigu Lake 與 Pangzhen 的紫色支線、Mountain of Imprisonment 入口都會鎖住。（此區的地圖截圖攻略站尚未公開，先以戰鬥截圖代替。）">
+<title>戲夢山莊｜影之刃零 攻略</title>
+<meta name="description" content="收集完蛇眼、蛇牙、蛇信後，從龐鎮青蛇屋後方的門進入。踏進戲夢山莊就是真結局的第一個截止點：還沒完成的真結局任務會鎖死（走到龐鎮後街的橋時虛空會警告你，可以回頭）。">
 <meta name="referrer" content="no-referrer">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,199 +15,116 @@
 
 <body data-page="ch8">
 <header class="topbar"><div class="wrap">
-<a class="brand" href="index.html"><span class="seal">影</span>影之刃零 攻略<small>PHANTOM BLADE ZERO</small></a>
-<nav class="chapnav"><a href="index.html">目錄</a><a href="ch1.html">泣溪谷</a><a href="ch2.html">赤林</a><a href="ch3.html">盧村</a><a href="ch4.html">龐鎮</a><a href="ch5.html">天命營</a><a href="ch6.html">梅姑湖</a><a href="ch7.html">囚山</a><a href="ch8.html" class="on">蜃樓莊園</a><a href="ch9.html">裂魂山</a></nav>
+<a class="brand" href="index.html"><span class="seal">影</span>影之刃零 攻略</a>
+<nav class="chapnav"><a href="index.html">目錄</a><a href="ch1.html">悲泣溪谷</a><a href="ch2.html">血色森林</a><a href="ch3.html">陸家村</a><a href="ch4.html">龐鎮</a><a href="ch5.html">正道大營</a><a href="ch6.html">梅谷湖</a><a href="ch7.html">枷籠山</a><a href="ch8.html" class="on">戲夢山莊</a><a href="ch9.html">斷魂山</a></nav>
 </div></header>
 
-<section class="hero"><div class="bgimg" style="background-image:url('https://images.keengamer.com/wp-content/uploads/2026/10/Fighting-Lei-Dang.jpg')"></div>
-<div class="wrap"><div class="kicker">後期區域</div>
-<h1>蜃樓莊園<span class="en">Mirage Estate ＋ 赤林收尾</span></h1>
-<p class="lead">從 Green Serpent House 的門進入。<b>踏進 Mirage Estate 就是不歸點</b>：Meigu Lake 與 Pangzhen 的紫色支線、Mountain of Imprisonment 入口都會鎖住。（此區的地圖截圖攻略站尚未公開，先以戰鬥截圖代替。）</p>
-<div class="stats"><div class="stat red"><b>1</b>錯過不再</div><div class="stat"><b>5</b>頭目</div><div class="stat"><b>11</b>道具 / 支線</div></div>
+<section class="hero"><div class="bgimg"><img src="https://images.keengamer.com/wp-content/uploads/2026/10/Fighting-Lei-Dang.jpg" alt=""></div>
+<div class="wrap"><div class="kicker">第八章</div>
+<h1>戲夢山莊<span class="en">最後的探索區域・血色森林冰封區</span></h1>
+<p class="lead">收集完蛇眼、蛇牙、蛇信後，從龐鎮青蛇屋後方的門進入。<b>踏進戲夢山莊就是真結局的第一個截止點</b>：還沒完成的真結局任務會鎖死（走到龐鎮後街的橋時虛空會警告你，可以回頭）。</p>
+<div class="stats"><div class="stat red"><b>1</b>錯過不再</div><div class="stat"><b>6</b>頭目</div><div class="stat"><b>2</b>道具／任務</div></div>
 </div></section>
 <div class="toolbar"><div class="wrap">
 <button class="chip on" data-f="all">全部</button>
 <button class="chip" data-f="miss">錯過不再</button>
 <button class="chip" data-f="boss">頭目</button>
 <button class="chip" data-f="weapon">武器</button>
-<button class="chip" data-f="edge">Phantom Edge</button>
+<button class="chip" data-f="edge">影之武裝</button>
 <button class="chip" data-f="acc">飾品</button>
-<button class="chip" data-f="tale">支線</button>
+<button class="chip" data-f="tale">異聞任務</button>
 <button class="chip" data-f="true">真結局</button>
 <span class="spacer"></span>
 <button class="chip" id="hidedone">隱藏已完成</button>
 <span class="progress" id="prog"></span>
 </div></div>
 <main><div class="wrap">
-<div class="section-title"><h2>進入前</h2><span>最後檢查</span></div><div class="timeline">
-<div class="entry banner-entry" data-tags="always"><div class="banner"><h4>Mirage Estate 不歸點</h4><ul><li>Secrets at the Heart of the Lake 已完成</li><li>Pangzhen / Meigu Lake 所有紫色支線（真結局必要）</li><li>Mountain of Imprisonment 已完成（Bi Feng、Crystal Puppet Eye）</li><li>Zhu Yuan 已擊敗</li><li>走到紅線樓梯時 Inanis 會警告你——還沒完成就回頭</li></ul></div></div>
+<div class="section-title"><h2>進入之前</h2><span>最後檢查</span></div><div class="timeline">
+<div class="entry banner-entry" data-tags="always"><div class="banner"><h4>戲夢山莊：不歸點</h4><ul><li>【湖心秘密】已完成（含和虛空的對話）</li><li>四個滅法之法面具：炎茹（火）、雷婷（雷）、蠱鶴（毒）、寒髓（冰）</li><li>兩個水晶眼珠：陰、陽</li><li>故事菜單裡所有紫色圖標的任務</li><li>火刀：祝原、橫刀：畢峰 已擊敗（保險起見）</li></ul><p>進入後只剩【血脈覺醒】（五根龍柱）可以繼續完成。</p></div></div>
 
 </div>
-<div class="section-title"><h2>蜃樓莊園 Mirage Estate</h2><span>依遊玩順序</span></div><div class="timeline">
-<div class="entry" data-id="s1e0" data-tags="acc">
+<div class="section-title"><h2>戲夢山莊</h2><span>依遊玩順序</span></div><div class="timeline">
+<div class="entry boss" data-id="s1e0" data-tags="boss">
 <div class="step">1</div>
-<div class="card"><div class="item-grid">
+<div class="card"><div class="boss-hero noimg"><div class="title"><div class="label">頭目</div><h3><span class="">玉鼎</span></h3><div class="sub">主線・練武場</div></div></div>
+<div class="boss-body">
+<div><h5>打法要點</h5><ul class="tips"><li>中文攻略尚未提供詳細打法，按紅光閃、藍光格擋、黑光不要擋的原則應對</li></ul></div>
+<div><dl class="kv"><dt>獎勵</dt><dd>武器【青龍偃月刀】</dd></dl><label class="check"><input type="checkbox"> 已擊敗</label></div>
+</div></div></div>
 
-<div class="body"><div class="tags"><span class="tag t-acc">飾品</span></div>
-<h3>Feather Fan Plume</h3>
-<p class="where">Nuo Mask Altar：爬梯後、下一個 Bell 前建築前方的桌上。</p>
-<label class="check"><input type="checkbox"> 已完成</label>
-</div></div></div></div>
-
-<div class="entry" data-id="s1e1" data-tags="tale true">
+<div class="entry boss" data-id="s1e1" data-tags="boss">
 <div class="step">2</div>
-<div class="card"><div class="item-grid">
+<div class="card"><div class="boss-hero" data-zoom="紅衣骨刃頭目"><img class="" loading="lazy" data-hide-broken src="https://images.keengamer.com/wp-content/uploads/2026/10/Qiu-Feng-Boss.jpg" alt="頭目截圖"><div class="title"><div class="label">頭目</div><h3><span class="">紅衣骨刃頭目</span></h3><div class="sub">主線・靈堂附近（中文名稱待確認）</div></div></div>
+<div class="boss-body">
+<div><h5>打法要點</h5><ul class="tips"><li>雙臂舉起 → 閃避接下來的兩擊</li><li>最後的砸地是 <span class="glint g-red">紅光</span>，完美閃避</li><li>紅色飛刃格擋，最後一把是 <span class="glint g-blue">藍光</span></li></ul></div>
+<div><dl class="kv"><dt>獎勵</dt><dd>飾品（面具類）</dd></dl><label class="check"><input type="checkbox"> 已擊敗</label></div>
+</div></div></div>
 
-<div class="body"><div class="tags"><span class="tag t-tale">支線 Tale</span><span class="tag t-true">真結局必要</span></div>
-<h3>Quick Hand&#x27;s Request（Mirage Estate）</h3>
-<p class="where">Zhang's Hideout Bell 後方洞穴，與 Zhang 交談拿清單。</p>
-<label class="check"><input type="checkbox"> 已完成</label>
-</div></div></div></div>
-
-<div class="entry miss" data-id="s1e2" data-tags="key miss true">
+<div class="entry miss" data-id="s1e2" data-tags="miss tale true">
 <div class="step">3</div>
 <div class="card"><div class="item-grid">
 
-<div class="body"><div class="tags"><span class="tag t-key">關鍵道具</span><span class="tag t-miss">錯過不再</span><span class="tag t-true">真結局必要</span></div>
-<h3>Zhang 的玉箱（Opera House）</h3>
-<p class="where">Opera House 內的玉箱，Quick Hand's Request 需要。</p><div class="deadline"><b>死線：</b>第一次經過時就要拿——歌劇結束後門會鎖上。</div>
+<div class="body"><div class="tags"><span class="tag t-miss">錯過不再</span><span class="tag t-tale">異聞任務</span><span class="tag t-true">真結局相關</span></div>
+<h3>妙手小張（戲夢山莊）</h3>
+<p class="where">在戲夢山莊會最後一次遇到妙手小張，找齊他要的寶藏，他的整條支線就完成了。</p><div class="deadline"><b>注意：</b>英文攻略提醒：歌劇院裡給小張的玉箱要第一次經過就拿，看完戲門會鎖上。</div>
 <label class="check"><input type="checkbox"> 已完成</label>
 </div></div></div></div>
 
-<div class="entry" data-id="s1e3" data-tags="acc">
+<div class="entry boss" data-id="s1e3" data-tags="boss">
 <div class="step">4</div>
-<div class="card"><div class="item-grid">
-
-<div class="body"><div class="tags"><span class="tag t-acc">飾品</span></div>
-<h3>Executioner&#x27;s Headscarf</h3>
-<p class="where">Opera House 爬梯子、經過人偶敵人後的寶箱。</p>
-<label class="check"><input type="checkbox"> 已完成</label>
-</div></div></div></div>
-
-<div class="entry boss" data-id="s1e4" data-tags="boss">
-<div class="step">5</div>
-<div class="card"><div class="boss-hero noimg"><div class="title"><div class="label">頭目</div><h3><span class="">Yuding</span></h3><div class="sub">No. 12 Crescent Blade Puppet · 主線</div></div></div>
+<div class="card"><div class="boss-hero" data-zoom="“虎炮”：雷當"><img class="" loading="lazy" data-hide-broken src="https://images.keengamer.com/wp-content/uploads/2026/10/Fighting-Lei-Dang.jpg" alt="頭目截圖"><div class="title"><div class="label">頭目</div><h3><span class="">“虎炮”：雷當</span></h3><div class="sub">主線（兩階段）</div></div></div>
 <div class="boss-body">
-<div><p class="note" style="margin:0 0 12px">Training Grounds Bell 附近。</p><h5>戰術</h5><ul class="tips"><li>攻略站尚未公開詳細打法；按 紅光閃 / 藍光彈 的基本原則應對</li></ul></div>
-<div><dl class="kv"><dt>獎勵</dt><dd>Crescent Blade（主武器）</dd></dl><label class="check"><input type="checkbox"> 已擊敗</label></div>
+<div><h5>打法要點</h5><ul class="tips"><li>他跳起後會發出全場衝擊波——躲到石頭後面</li><li>攻擊來自四面八方，保持移動、不要貪刀</li></ul></div>
+<div><dl class="kv"><dt>獎勵</dt><dd>影之武裝【虎神炮】（可以轟開脆弱的牆）</dd></dl><label class="check"><input type="checkbox"> 已擊敗</label></div>
 </div></div></div>
 
-<div class="entry" data-id="s1e5" data-tags="key">
+<div class="entry boss" data-id="s1e4" data-tags="boss opt true">
+<div class="step">5</div>
+<div class="card"><div class="boss-hero" data-zoom="暗魔天堡堡主：魔淵"><img class="" loading="lazy" data-hide-broken src="https://www.pcgamesn.com/wp-content/sites/pcgamesn/2026/10/mo-yuan-550x309.jpg" alt="頭目截圖"><div class="title"><div class="label">可選頭目</div><h3><span class="">暗魔天堡堡主：魔淵</span></h3><div class="sub">可選・戲夢山莊龍柱（第五根）</div></div></div>
+<div class="boss-body">
+<div><div class="tags"><span class="tag t-opt">可選</span><span class="tag t-true">真結局相關</span></div><h5>打法要點</h5><ul class="tips"><li>蓄力跳擊是 <span class="glint g-red">紅光</span>，幾乎一擊必殺，一定要完美閃避</li><li>他會從天上召喚光柱，持續移動</li></ul></div>
+<div><dl class="kv"><dt>獎勵</dt><dd>【暗魔天堡面具】（黑傷的鑄魂材料，升級成【黑魔傷】）＋ 完成【血脈覺醒】</dd></dl><label class="check"><input type="checkbox"> 已擊敗</label></div>
+</div></div></div>
+
+</div>
+<div class="section-title"><h2>血色森林（冰封區）</h2><span>進入戲夢山莊觸發劇情後開放</span></div><div class="timeline">
+<div class="entry" data-id="s2e0" data-tags="key">
 <div class="step">6</div>
 <div class="card"><div class="item-grid">
 
-<div class="body"><div class="tags"><span class="tag t-key">關鍵道具</span></div>
-<h3>Opera Ticket</h3>
-<p class="where">Training Grounds 北側祭壇。</p>
+<div class="body"><div class="tags"><span class="tag t-key">劇情道具</span></div>
+<h3>第三座殺氣塔</h3>
+<p class="where">血色森林之前去不了的區域變成冰天雪地，裡面有第三座殺氣塔。</p>
 <label class="check"><input type="checkbox"> 已完成</label>
 </div></div></div></div>
 
-<div class="entry boss" data-id="s1e6" data-tags="boss">
+<div class="entry boss" data-id="s2e1" data-tags="boss opt">
 <div class="step">7</div>
-<div class="card"><div class="boss-hero" data-zoom="Qiu Feng"><img class="" loading="lazy" data-hide-broken src="https://images.keengamer.com/wp-content/uploads/2026/10/Qiu-Feng-Boss.jpg" alt="頭目截圖"><div class="title"><div class="label">頭目</div><h3><span class="">Qiu Feng</span></h3><div class="sub">The Crimson Boneblade · 主線</div></div></div>
+<div class="card"><div class="boss-hero" data-zoom="三張臉的詭異魔偶（第二次）"><img class="" loading="lazy" data-hide-broken src="https://images.keengamer.com/wp-content/uploads/2026/10/Aberrant-Three-Faced-Puppet.jpg" alt="頭目截圖"><div class="title"><div class="label">可選頭目</div><h3><span class="">三張臉的詭異魔偶（第二次）</span></h3><div class="sub">可選・冰封區</div></div></div>
 <div class="boss-body">
-<div><p class="note" style="margin:0 0 12px">Mourning Hall Bell 附近的建築。</p><h5>戰術</h5><ul class="tips"><li>雙臂舉起 → 閃避接下來兩擊</li><li>最後的砸地是 <span class="glint g-red">紅光</span>，完美閃避</li><li>紅色飛刃彈反，最後一把是 <span class="glint g-blue">藍光</span></li></ul></div>
-<div><dl class="kv"><dt>獎勵</dt><dd>Wraith Mask（飾品）</dd></dl><label class="check"><input type="checkbox"> 已擊敗</label></div>
+<div><div class="tags"><span class="tag t-opt">可選</span></div><h5>打法要點</h5><ul class="tips"><li>鑽鏡子消失時先準備閃避</li><li>衝出來的攻擊是 <span class="glint g-red">紅光</span></li></ul></div>
+<div><dl class="kv"><dt>獎勵</dt><dd>【黑傷雙刃】的另一半鑄魂材料</dd></dl><h5>推薦配裝</h5><div class="loadout"><div class="row"><span class="tag t-weapon">武器</span><span>一定要用【熾刃】擊敗她，才拿得到材料</span></div></div><label class="check"><input type="checkbox"> 已擊敗</label></div>
 </div></div></div>
-
-<div class="entry" data-id="s1e7" data-tags="acc">
-<div class="step">8</div>
-<div class="card"><div class="item-grid">
-
-<div class="body"><div class="tags"><span class="tag t-acc">飾品</span></div>
-<h3>Nuo Mask</h3>
-<p class="where">收集 Sorrow（Back Hill）、Wrath（Opera House 東側祭壇）、Joy（Willow Pavilion）三個碎片，交給 Nuo Mask Altar 的 Old Beggar。</p>
-<label class="check"><input type="checkbox"> 已完成</label>
-</div></div></div></div>
-
-<div class="entry" data-id="s1e8" data-tags="acc true">
-<div class="step">9</div>
-<div class="card"><div class="item-grid">
-
-<div class="body"><div class="tags"><span class="tag t-acc">飾品</span><span class="tag t-true">真結局必要</span></div>
-<h3>Thundermoon Lantern</h3>
-<p class="where">把 Mirage Estate 的寶物交給 Zhang's Hideout 的 Zhang。完成 Quick Hand Zhang 線。</p>
-<label class="check"><input type="checkbox"> 已完成</label>
-</div></div></div></div>
-
-<div class="entry boss" data-id="s1e9" data-tags="boss">
-<div class="step">10</div>
-<div class="card"><div class="boss-hero" data-zoom="Lei Dang"><img class="" loading="lazy" data-hide-broken src="https://images.keengamer.com/wp-content/uploads/2026/10/Fighting-Lei-Dang.jpg" alt="頭目截圖"><div class="title"><div class="label">頭目</div><h3><span class="">Lei Dang</span></h3><div class="sub">The Order&#x27;s Envoy · 主線（兩階段）</div></div></div>
-<div class="boss-body">
-<div><p class="note" style="margin:0 0 12px">Perfect Vessel Pond Bell 附近。PCGamesN 評為最難頭目之一。</p><h5>戰術</h5><ul class="tips"><li>他跳起後會發出全場衝擊波——躲到石頭後面</li><li>攻擊來自各個方向，保持移動、不要貪刀</li></ul></div>
-<div><dl class="kv"><dt>獎勵</dt><dd>Tiger Cannon（Phantom Edge，可轟開脆弱牆壁）</dd></dl><label class="check"><input type="checkbox"> 已擊敗</label></div>
-</div></div></div>
-
-<div class="entry boss" data-id="s1e10" data-tags="boss opt true">
-<div class="step">11</div>
-<div class="card"><div class="boss-hero" data-zoom="Mo Yuan"><img class="" loading="lazy" data-hide-broken src="https://www.pcgamesn.com/wp-content/sites/pcgamesn/2026/10/mo-yuan-550x309.jpg" alt="頭目截圖"><div class="title"><div class="label">可選頭目</div><h3><span class="">Mo Yuan</span></h3><div class="sub">Leader of the Bastion of Mo · 可選（Mirage Estate 長柱）</div></div></div>
-<div class="boss-body">
-<div><div class="tags"><span class="tag t-opt">可選</span><span class="tag t-true">真結局必要</span></div><h5>戰術</h5><ul class="tips"><li>蓄力跳擊是 <span class="glint g-red">紅光</span>，幾乎一擊必殺，一定要完美閃避</li><li>他會從天上召喚光柱，持續移動閃避</li></ul></div>
-<div><dl class="kv"><dt>獎勵</dt><dd>Bastion of Mo Mask（Soul Tempering）＋ 完成 Bloodline Awakening 5/5</dd></dl><label class="check"><input type="checkbox"> 已擊敗</label></div>
-</div></div></div>
-
-</div>
-<div class="section-title"><h2>赤林收尾 Crimson Forest Cleanup</h2><span>現在可以處理的舊區域內容</span></div><div class="timeline">
-<div class="entry" data-id="s2e0" data-tags="acc">
-<div class="step">12</div>
-<div class="card"><div class="item-grid">
-
-<div class="body"><div class="tags"><span class="tag t-acc">飾品</span></div>
-<h3>Frostward</h3>
-<p class="where">Burial Grounds Bell 往西南，穿過結冰水面到第一個區域。冰屬性減傷。</p>
-<label class="check"><input type="checkbox"> 已完成</label>
-</div></div></div></div>
-
-<div class="entry" data-id="s2e1" data-tags="acc">
-<div class="step">13</div>
-<div class="card"><div class="item-grid">
-
-<div class="body"><div class="tags"><span class="tag t-acc">飾品</span></div>
-<h3>Chaos Ring</h3>
-<p class="where">Mirrorwood Depths Bell 的傳送門謎題區第二段，舊東側傳送門前。</p>
-<label class="check"><input type="checkbox"> 已完成</label>
-</div></div></div></div>
 
 <div class="entry boss" data-id="s2e2" data-tags="boss opt">
-<div class="step">14</div>
-<div class="card"><div class="boss-hero noimg"><div class="title"><div class="label">可選頭目</div><h3><span class="">Yucong</span></h3><div class="sub">No. 34 Twisted Puppet · 可選（Threadbound Great Tree）</div></div></div>
+<div class="step">8</div>
+<div class="card"><div class="boss-hero noimg"><div class="title"><div class="label">可選頭目</div><h3><span class="">玉琮</span></h3><div class="sub">可選・絲線纏繞的巨樹</div></div></div>
 <div class="boss-body">
-<div><div class="tags"><span class="tag t-opt">可選</span></div><p class="note" style="margin:0 0 12px">就是第一章 Triple Threat 支線的目標。</p><h5>戰術</h5><ul class="tips"><li>攻略站尚未公開詳細打法；按 紅光閃 / 藍光彈 的基本原則應對</li></ul></div>
-<div><dl class="kv"><dt>獎勵</dt><dd>Freezing Chaos（主武器）；第三階段：Chaos Iron Fragment II</dd></dl><h5>推薦配置</h5><div class="loadout"><div class="row"><span class="tag t-weapon">武器</span><span>Game8：戰前裝備 Blazing Edge，否則戰鬥只到第二階段，錯過額外過場與 Chaos Iron Fragment II（Shadowless Edge 需要）</span></div></div><label class="check"><input type="checkbox"> 已擊敗</label></div>
+<div><div class="tags"><span class="tag t-opt">可選</span></div><p class="note" style="margin:0 0 12px">英文攻略：戰前裝備特定武器才會有第三階段（多拿一個材料），中文攻略尚未確認。</p><h5>打法要點</h5><ul class="tips"><li>中文攻略尚未提供詳細打法</li></ul></div>
+<div><dl class="kv"><dt>獎勵</dt><dd>新的主武器</dd></dl><label class="check"><input type="checkbox"> 已擊敗</label></div>
 </div></div></div>
 
-<div class="entry" data-id="s2e3" data-tags="tale">
-<div class="step">15</div>
-<div class="card"><div class="item-grid">
-
-<div class="body"><div class="tags"><span class="tag t-tale">支線 Tale</span></div>
-<h3>A Severed Mindseal（赤林塔）</h3>
-<p class="where">Crimson Forest Sha-Chi Tower 6F 的 Bell 旁。到塔底盪到熔爐取得 Primal Stone 與塔鑰匙，交給 Spectral Blade。</p>
-<label class="check"><input type="checkbox"> 已完成</label>
-</div></div></div></div>
-
-<div class="entry" data-id="s2e4" data-tags="tale">
-<div class="step">16</div>
-<div class="card"><div class="item-grid">
-
-<div class="body"><div class="tags"><span class="tag t-tale">支線 Tale</span></div>
-<h3>Use It Against Them / Heart of the Fist</h3>
-<p class="where">同在 6F：Jade Dancer 邀你只用 Fiend Saws ＋ Iron Gauntlets 切磋；Iron Fiend 的支線在 Burial Grounds Bell 西南的大墓碑完成。</p><p class="note">需要第三章頭目第三階段掉落的 Fiend Saws。</p>
-<label class="check"><input type="checkbox"> 已完成</label>
-</div></div></div></div>
-
 </div>
-<div class="pager"><a href="ch7.html"><small>← 上一章</small><b>囚山</b></a><a class="next" href="ch9.html"><small>下一章 →</small><b>裂魂山</b></a></div></div></main><footer><div class="wrap">
-<p>非官方粉絲攻略。遊戲畫面與名稱版權屬 S-GAME 所有。物品、頭目名稱使用英文版遊戲名稱。</p>
-<p>截圖來源（外部連結）：地圖截圖 © <a href="https://www.powerpyx.com/phantom-blade-zero-collectibles-guide-100-completion/" target="_blank" rel="noopener">PowerPyx</a>；
-頭目截圖 © <a href="https://www.keengamer.com/articles/guides/phantom-blade-zero-all-bosses-and-their-rewards/" target="_blank" rel="noopener">KeenGamer</a>、
+<div class="pager"><a href="ch7.html"><small>← 上一章</small><b>枷籠山</b></a><a class="next" href="ch9.html"><small>下一章 →</small><b>斷魂山</b></a></div></div></main><footer><div class="wrap">
+<p>非官方玩家攻略。遊戲畫面與名稱版權屬 S-GAME 所有。名稱依中文版遊戲（整理自遊民星空等中文攻略），已轉為繁體字。</p>
+<p>截圖來源（外部連結）：<a href="https://www.gamersky.com/tools/guide-map/roadbooks/53" target="_blank" rel="noopener">遊民星空 全收集路線</a>、
+<a href="https://www.gamersky.com/handbook/202610/2235534.shtml" target="_blank" rel="noopener">遊民星空 全BOSS打法</a>、
+<a href="https://www.gamersky.com/handbook/202610/2235544.shtml" target="_blank" rel="noopener">遊民星空 全飾品</a>；
+第五～七章部分地圖 © <a href="https://www.powerpyx.com/phantom-blade-zero-collectibles-guide-100-completion/" target="_blank" rel="noopener">PowerPyx</a>；
+部分頭目截圖 © <a href="https://www.keengamer.com/articles/guides/phantom-blade-zero-all-bosses-and-their-rewards/" target="_blank" rel="noopener">KeenGamer</a>、
 <a href="https://www.pcgamesn.com/phantom-blade-zero/bosses" target="_blank" rel="noopener">PCGamesN</a>。</p>
-<p>資料整理自：<a href="https://game8.co/games/Phantom-Blade-Zero/archives/634952" target="_blank" rel="noopener">Game8</a>、
-<a href="https://allthings.how/phantom-blade-zero-missables/" target="_blank" rel="noopener">AllThingsHow</a>、
-<a href="https://phantombladezerocodex.com/missables" target="_blank" rel="noopener">PBZ Codex</a>、
-<a href="https://grindnstrat.com/phantom-blade-zero-bosses/" target="_blank" rel="noopener">grindnstrat</a>（屬性弱點）、
-<a href="https://www.keengamer.com/articles/guides/phantom-blade-zero-complete-walkthrough-all-quests/" target="_blank" rel="noopener">KeenGamer Walkthrough</a>。
-各站資料偶有出入，以遊戲內實際情況為準。</p>
+<p>資料整理自：遊民星空（全收集路線、全BOSS、全支線、全飾品、全武器、真結局、各區域探索注意事項）、17173、kungfupunk、Phantom Blade Atlas，以及部分英文攻略（Game8、PowerPyx）。
+第六章之後的中文攻略仍在更新，少數名稱標示「待確認」。各站資料偶有出入，以遊戲內為準。</p>
 </div></footer>
 <script src="assets/app.js"></script>
 </body></html>

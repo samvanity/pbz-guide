@@ -1,725 +1,780 @@
 # -*- coding: utf-8 -*-
-"""Generate the static guide pages (index.html, ch1..ch9.html) from the data below.
+"""生成攻略網站的靜態頁面（index.html、ch1..ch9.html）。
 
-Run:  python claude/tools/build.py
+內容以簡體中文撰寫（與遊民星空等中文攻略的遊戲內名稱一致），
+輸出時用 OpenCC 轉成繁體中文。
+
+執行：python claude/tools/build.py   （需要 pip install opencc-python-reimplemented）
 """
 import html
+import json
 import os
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+import opencc
 
-# ---------- image sources ----------
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TOOLS = os.path.join(ROOT, "tools")
+_cc = opencc.OpenCC("s2tw")
+
+
+def t(s):
+    """簡體 → 繁體（只用於文字，不用於網址）。"""
+    return _cc.convert(s) if s else s
+
+
+def _load(name):
+    with open(os.path.join(TOOLS, name), encoding="utf-8") as f:
+        return json.load(f)
+
+
+ROUTE = _load("gs_route.json")     # 遊民星空 全收集路線：段落 → 截圖
+BOSS = _load("gs_boss.json")       # 遊民星空 全BOSS打法：頭目 → 截圖
+ACC = _load("gs_acc.json")         # 遊民星空 全飾品：飾品 → 截圖
+
 PP = "https://www.powerpyx.com/wp-content/uploads/phantom-blade-zero-"
 KG = "https://images.keengamer.com/wp-content/uploads/2026/10/"
 PG = "https://www.pcgamesn.com/wp-content/sites/pcgamesn/2026/10/"
 
 
-def pp(region, n, suffix=""):
-    """PowerPyx screenshot pair: (-1 = in-game map with marker, -2 = in-world)."""
-    return (f"{PP}{region}-{n}-1{suffix}.jpg", f"{PP}{region}-{n}-2{suffix}.jpg")
+# ---------- 截圖小工具 ----------
+
+def G(keyword, n=2):
+    """在遊民星空路線攻略中找到含 keyword 的段落，取其後（同一小節內）的截圖。"""
+    for i, o in enumerate(ROUTE):
+        if keyword in o["text"]:
+            imgs = []
+            for p in ROUTE[i:i + 4]:
+                if p["sec"] != o["sec"]:
+                    break
+                imgs += p["imgs"]
+                if len(imgs) >= n:
+                    break
+            if not imgs:
+                raise KeyError("no image after: " + keyword)
+            return [(u, "位置" if k == 0 else "實地") for k, u in enumerate(imgs[:n])]
+    raise KeyError("keyword not found: " + keyword)
 
 
-WCV, CF, VL, PZ, ME, ML, MI = (
-    "weeping-creek-valley", "crimson-forest", "village-of-lu", "pangzhen",
-    "mandate-encampment", "meigu-lake", "mountain-of-imprisonment",
-)
+def A(name):
+    """遊民星空 全飾品攻略：第一張與最後一張截圖。"""
+    imgs = ACC[name]
+    picks = [imgs[0]] + ([imgs[-1]] if len(imgs) > 1 else [])
+    return [(u, "位置" if k == 0 else "實地") for k, u in enumerate(picks)]
+
+
+def gb(name):
+    """遊民星空 全BOSS：(戰鬥畫面, 位置圖)。第一張多為位置，最後一張為戰鬥。"""
+    imgs = BOSS[name]
+    return imgs[-1], imgs[0]
+
+
+def pp(region, n):
+    """PowerPyx：-1 是遊戲內地圖（標記位置），-2 是實地畫面。"""
+    return [(f"{PP}{region}-{n}-1.jpg", "地圖"), (f"{PP}{region}-{n}-2.jpg", "實地")]
+
+
+ME, ML, MI = "mandate-encampment", "meigu-lake", "mountain-of-imprisonment"
 
 TAGS = {
-    "miss": ("錯過不再", "t-miss"),
+    "miss": ("错过不再", "t-miss"),
     "weapon": ("武器", "t-weapon"),
-    "edge": ("Phantom Edge", "t-edge"),
-    "acc": ("飾品", "t-acc"),
-    "tale": ("支線 Tale", "t-tale"),
-    "key": ("關鍵道具", "t-key"),
-    "pillar": ("長柱挑戰", "t-pillar"),
-    "mask": ("Acolyte 面具", "t-mask"),
-    "true": ("真結局必要", "t-true"),
-    "opt": ("可選", "t-opt"),
+    "edge": ("影之武装", "t-edge"),
+    "acc": ("饰品", "t-acc"),
+    "tale": ("异闻任务", "t-tale"),
+    "purple": ("紫色任务", "t-pillar"),
+    "key": ("剧情道具", "t-key"),
+    "true": ("真结局相关", "t-true"),
+    "opt": ("可选", "t-opt"),
 }
 
-# ---------- entry constructors ----------
 
-def I(name, tags, where, note="", miss=None, img=None, zh=""):
-    return dict(kind="item", name=name, tags=tags, where=where, note=note, miss=miss, img=img, zh=zh)
+def I(name, tags, where, note="", miss=None, img=None):
+    return dict(kind="item", name=name, tags=tags, where=where, note=note, miss=miss, img=img or [])
 
 
-def B(name, sub, img, map=None, opt=False, reward="", weak="", resist="", gear=None,
-      tips=None, note="", spoil=False, true=False, label=None):
+def B(name, sub, img=None, map=None, opt=False, reward="", gear=None, tips=None,
+      note="", spoil=False, true=False):
     return dict(kind="boss", name=name, sub=sub, img=img, map=map, opt=opt, reward=reward,
-                weak=weak, resist=resist, gear=gear or [], tips=tips or [], note=note,
-                spoil=spoil, true=true, label=label)
+                gear=gear or [], tips=tips or [], note=note, spoil=spoil, true=true)
 
 
 def W(title, body, info=False):
     return dict(kind="banner", title=title, body=body, info=info)
 
 
-R = '<span class="glint g-red">紅光</span>'
-BL = '<span class="glint g-blue">藍光</span>'
+def gB(key, name, sub, **kw):
+    hero, mp = gb(key)
+    return B(name, sub, img=hero, map=mp, **kw)
 
-# =====================================================================
-#  CHAPTER DATA (each list is in play order)
-# =====================================================================
+
+R = '<span class="glint g-red">红光</span>'
+BL = '<span class="glint g-blue">蓝光</span>'
+BK = '<span class="glint g-black">黑光</span>'
+
 CHAPTERS = []
 
-# ---------------------------------------------------------------- 1
+# =====================================================================
+# 第一章 悲泣溪谷
+# =====================================================================
 CHAPTERS.append(dict(
-    id="ch1", num="序章・第一章", title="泣溪谷", en="Prologue & Weeping Creek Valley",
-    cover=KG + "Fighting-The-Hunt-1.jpg",
-    lead="序章兩場教學戰之後抵達第一個大區域。這裡的 Outpost（前哨站）支線全部會在第二章頭目戰後失效，"
-         "而治療師 Yu'er 的藥草要越早交越好。",
+    id="ch1", num="序幕・第一章", title="悲泣溪谷", sub="序幕・驿站・杀气塔",
+    cover=gb("“组织”猎杀者-追命")[0],
+    lead="序幕两场教学战之后来到悲泣溪谷。驿站和玉儿的支线都有期限：【见习医师】进入血色森林就失败，【难言之隐】进入陆家村就失败，"
+         "【坚岩护腕】打完血色森林后就拿不到了。",
     sections=[
-        ("序章 Prologue", "兩場劇情教學戰", [
-            B("Zuo Shang", "序章教學頭目 · Diverging Paths", KG + "Fighting-Zho-Shang.jpg",
-              reward="無（劇情戰）",
-              gear=[("提示", "此戰為教學，結果固定，專心熟悉格擋與彈反即可")],
-              tips=["近戰連段時，他身後會飛來遠程攻擊——聽音效提示並舉盾格擋",
-                    "彈指 = 遠程攻擊要來：先按住格擋，再閃避飛來的巨錘",
-                    f"飛劍連段的第 7 擊是 {BL}，在此時彈反",
-                    "迴旋劍斬接四連踢，之後是空中遠程與一記可閃避的重擊"]),
-            B("The Hunt（第一戰）", "Hunter of the Order · Reckless Pursuit", KG + "Fighting-The-Hunt-1.jpg",
-              reward="無（打到半血即過關）",
-              gear=[("提示", "只需把他打到一半血量，不必擊殺")],
-              tips=["開場五連擊的最後一下可彈反；彈反成功後會出現 Ghostep 提示，連按可白打",
-                    f"他跳到空中時，按住格擋擋下四下鎖鏈揮擊，再彈反最後的 {BL} 突刺",
-                    "空檔後他的下一擊同樣可以彈反"]),
+        ("序幕", "教学战", [
+            B("左殇", "序幕・练武场切磋", KG + "Fighting-Zho-Shang.jpg", reward="无（教学战，结果固定）",
+              tips=[f"本作最核心的操作：敌人的 {BL} 招式要完美格挡，{R} 招式要完美闪避",
+                    "近战连段时身后会飞来远程攻击，听声音提示按住格挡",
+                    "打响指 = 远程攻击要来了，先按住格挡，再闪避飞来的巨锤"]),
+            B("追命（马车战）", "序幕・马车追击", KG + "Fighting-The-Hunt-1.jpg", reward="无（打到一半剧情自动结束）",
+              tips=["开场五连击最后一下可以格挡反击，成功后会出现鬼步提示，可以绕后连打",
+                    f"他挂在半空挥锁链时，先按住格挡，再格挡最后的 {BL} 突刺"]),
         ]),
-        ("泣溪谷 Weeping Creek Valley", "依遊玩順序", [
-            I("Triple Threat", ["tale", "opt"], "The Lady's Rift Bell 旁的雕像，進入即可接取。",
-              "此時實力不足以完成，留到遊戲後期（Mirage Estate 之後）回來處理。",
-              img=pp(WCV, 3)),
-            I("Hunter's Insight", ["acc"], "從 The Lady's Rift Bell 攀上鎖鏈後，前方敵人掉落。", img=pp(WCV, 4)),
-            I("Flesh Lily（Yu'er）", ["tale", "true"], "與瀑布旁的 Yu'er 交談自動接取。",
-              "這條線與後面的 Apprentice Healer、A Healer's Mercy 一起構成獎盃 The Healer's Legacy。",
-              img=pp(WCV, 5)),
-            I("Sanguine Twin", ["weapon"], "Yu'er 後方瀑布處的武器架上。", "速度快的雙刀，前期好用。", img=pp(WCV, 6)),
-            I("Battle Wraps", ["acc"], "First Meeting Bell 的橋後，拿大劍的敵人掉落。", img=pp(WCV, 8)),
-            I("Four Fierce Axes", ["tale"], "Broken Puppet Valley Bell 附近樹旁的書本。", img=pp(WCV, 11)),
-            B("Jagged Steel", "The Frenzied Brute · 主線", KG + "Fighting-Jagged-Steel.jpg", map=pp(WCV, 13)[0],
-              reward="Jagged Steel（主武器，出血）", weak="毒、雷",
-              gear=[("武器", "初始武器即可"), ("提示", "這是彈反 / 完美閃避的教學頭目")],
-              tips=[f"看到 {BL} 就彈反，看到 {R} 就閃避——之後所有頭目都遵循這個規則",
-                    "完美閃避會觸發 Ghostep，趁機反擊",
-                    "打完拿到的 Jagged Steel 出血效果強，可作為整個第一章的主力"]),
-            I("Purge the Sect（Brooding Old Archer）", ["tale", "miss"], "Outpost 屋頂上的老弓手。",
-              "需要去 Creek Valley Plains 的弓手營地擊敗所有弓手，取得 Broken-String Bow 交給他。",
-              miss="第二章最終頭目 Bai Chilian 被擊敗後失效。", img=pp(WCV, 17)),
-            I("Sanguine Reach", ["weapon"], "Outpost 鐵匠 Forge 正後方的武器架。",
-              "後期可用 Scorching Flames 進行 Soul Tempering。", img=pp(WCV, 18)),
-            I("Festering Secrets", ["tale", "miss"], "與 Forge 交談後走向守衛自動接取（Outpost 的鐵鍊封住院子）。",
-              "需要 Peng Meng 給的 Dread Axe 斬斷鐵鍊。",
-              miss="Bai Chilian 被擊敗後失效。", img=pp(WCV, 19)),
-            B("Peng Meng", "The Axemaster · 主線", KG + "Peng-Meng-Boss.jpg", map=pp(WCV, 22)[0],
-              reward="Dread Axe（Phantom Edge，可斬鐵鍊、破盾）", weak="毒、出血", resist="火 / 冰 / 雷，極抗水",
-              gear=[("武器", "Jagged Steel（出血）"), ("飾品", "Battle Wraps、Hunter's Insight")],
-              tips=["大多招式都能格擋或彈反，而且他常常不會接續會打空你 Sha-Chi 的攻擊",
-                    f"上撈斧一定接 {BL} 重擊（兩種變化），等光再彈反",
-                    "雙手扛斧上肩 → 轉身後有一記可完美彈反的大揮",
-                    f"抓取是 {R} Killer Move，一定要閃",
-                    "背摔若命中會清空全部 Sha-Chi，務必閃開"]),
-            I("Apprentice Healer", ["tale", "miss"], "Outpost Bell 與 Yu'er 交談接取。",
-              "收集三種藥草：Blood-Stopper Vine、Congealeaf、Blemish Goldweed（見下方），交給 Yu'er。",
-              miss="第二章擊敗 Jing Ye 時自動失敗；另有攻略指出 Yu'er 移往 Crimson Forest 營地後就無法在 Outpost 交，最好一拿齊就交。",
-              img=pp(WCV, 25)),
-            I("Boulderguard", ["acc", "miss"], "先跟 Old Archer 右邊建築裡、躲在箱子後的人（Petrified Mandate Disciple）反覆對話直到他提到墳墓，"
-              "再去 Axemaster's Holding Cell Bell 旁檢查墳墓。",
-              "效果：未被破防時受到傷害 -15%。",
-              miss="Bai Chilian 被擊敗後此 NPC 會變成敵人，無法再觸發。", img=pp(WCV, 27, "-")),
-            I("Blood-Stopper Vine", ["key"], "Focus Pill 寶箱之後、橋下的小溪中。Apprentice Healer 藥草 1/3。",
-              img=pp(WCV, "key-item-1")),
-            I("Broken-String Bow", ["key"], "Creek Valley Plains Entrance Bell 上坡的弓手營地，打倒所有弓手。", img=pp(WCV, 29)),
-            I("Token of Pursuit", ["acc"], "弓手營地附近的寶箱。", img=pp(WCV, 30)),
-            I("Feather Bow", ["edge", "miss"], "把 Broken-String Bow 交給 Outpost 的 Brooding Old Archer 修好。",
-              miss="Bai Chilian 被擊敗後此支線自動失敗。", img=pp(WCV, 32)),
-            B("Hua, Deadly Betrothed", "可選頭目 · Flesh Lily Fields", KG + "Fighting-Hua-Deadly-Betrothed.jpg", map=pp(WCV, 34)[0],
-              opt=True, reward="Scarlet Wraithblade（主武器）、Twin Flesh Lilies", weak="火，稍弱雷", resist="冰 / 水，免疫毒與出血",
-              gear=[("武器", "火屬性或純物理；Jagged Steel 的出血對她無效"),
-                    ("提示", "從 Valley Sha-Chi Tower 1F 後方的木橋滑下去，穿過開口")],
-              tips=["地上的花叢會持續傷害，保持移動、不要站在花上",
-                    "打贏後拿到的 Scarlet Wraithblade 被多家攻略評為前半段最強武器之一，削 Sha-Chi 極快",
-                    "戰鬥場地祭壇旁的 Twin Flesh Lilies 記得撿"]),
-            I("Twin Flesh Lilies", ["key", "miss"], "Hua 戰鬥場地的祭壇旁。交給 Yu'er 完成 Flesh Lily。",
-              "之後 Pangzhen 的 Blessed Jade Pendant 也需要 Flesh Lily。",
-              miss="各攻略說法不一：最晚在 Bai Chilian 之前、或進入 Village of Lu 之前交給 Yu'er。建議拿到就交。",
-              img=pp(WCV, "key-item-2")),
-            I("A Severed Mindseal（Shadow Warden）", ["tale", "miss"], "Valley Sha-Chi Tower Summit Bell 的 Shadow Warden。",
-              "屋頂敵人掉落 Sha-Chi Furnace Inspection Crank → 到塔 1F 熔爐使用，取得 Primal Stone 交給他。",
-              miss="第一次交付 Primal Stone 必須在離開泣溪谷前完成，否則失去獎盃 Spectral Blade。",
-              img=pp(WCV, 37)),
-            I("Primal Stone", ["key"], "用 Inspection Crank 打開 Tower 1F 的熔爐取得。", img=pp(WCV, "key-item-4")),
-            B("The Hunt（第二戰）", "Hunter of the Order → Sixfold Scythe · 章節頭目", KG + "The-Hunt-Boss.jpg", map=pp(WCV, 40)[0],
-              reward="Hunter's Chain Sickle（Phantom Edge，可鉤索移動）", weak="雷", resist="火 / 毒 / 出血",
-              gear=[("武器", "Scarlet Wraithblade（快速削 Sha-Chi）＋ Jagged Steel 交替"),
-                    ("Phantom Edge", "Dread Axe"),
-                    ("飾品", "Battle Wraps、Hunter's Insight、Token of Pursuit"),
-                    ("道具", "Healing Gourd、Focus Pill")],
-              tips=["五連斬全部按住格擋，最後一下重擊彈反",
-                    f"往側邊跳 → 雙斬突進，看到 {BL} 彈反",
-                    "三道範圍斬會生成水龍捲：先避開（血少就先補），再彈反接下來的突進",
-                    "空中迴旋在結束前一瞬間彈反；他的攻擊範圍很大，貼身打反而安全"]),
-            I("Lingran's Pendant", ["acc"], "用 Chain Sickle 鉤到 The Beginning Bell 附近的寶箱平台。", img=pp(WCV, 41)),
-            I("Sha-Chi Tower Base Camp Gate Key", ["key"], "用 Chain Sickle 爬上塔頂取得，打開 Creek Valley Plains Entrance Bell 附近的門。",
-              "這條路線通往 Crimson Manor，但莊園要到很後期（取得 Puppet's Tongue）才能攻略。",
-              img=pp(WCV, "key-item-5")),
-            I("Long Pillar Overlook Bell", ["pillar"], "鎖住的門後、橋前的小屋內。", img=pp(WCV, 42)),
-            I("Congealeaf", ["key"], "從 Long Pillar Overlook Bell 過橋、爬鷹架後地上（有敵人）。藥草 2/3。", img=pp(WCV, "key-item-7")),
-            B("Gold-Masked One #1", "可選 · 泣溪谷長柱", PG + "gold-masked-one-550x309.jpg", map=pp(WCV, 45)[0],
-              opt=True, reward="Counterstrike Bracers（飾品）＋ Bloodline Awakening 進度 1/5",
-              gear=[("武器", "Outlaw Warblade（破防關鍵，第二章 Jing Ye 掉落）＋ Jagged Steel"),
-                    ("Phantom Edge", "Dread Axe、Hunter's Chain Sickle"),
-                    ("飾品", "Shenji's Ring（格擋耗 Sha-Chi 降低）、Resonance Talisman（Sha-Chi 上限）"),
-                    ("道具", "Healing Gourd、Simmering Brew")],
-              note="攻略普遍建議先別打，拿到 Outlaw Warblade 後再回來。五根長柱是真結局條件之一。",
-              tips=["破防後他會短暫無敵——把連段塞在破防窗口內",
-                    f"{R}：翻劍跳斬、滑鏟、轉身後突刺、眼睛發紅時的抓取 → 完美閃避",
-                    f"{BL}：第五道劍氣後的跳斬、長距離後空翻斬 → 彈反",
-                    "等他連段結束再找完美閃避 / 彈反繞到背後；切換武器管理 Sha-Chi"]),
-            I("Blemish Goldweed", ["key"], "Weeping Creek Long Pillar 流出的河流盡頭。藥草 3/3。", img=pp(WCV, "key-item-8")),
-            I("Medicine Case", ["acc", "miss"], "三種藥草交給 Yu'er 後獲得。",
-              miss="Jing Ye（第二章）被擊敗後 Apprentice Healer 失敗，就拿不到。", img=pp(WCV, 47)),
-            I("Reflex Device", ["acc"], "用 Inspection Crank 打開 Sha-Chi Tower Base Bell 旁的熔爐。", img=pp(WCV, 51)),
-            B("Aberrant Three-Faced Puppet", "可選 · Challenge Rift 神殿廣場", KG + "Aberrant-Three-Faced-Puppet.jpg",
-              opt=True, reward="Three-Headed Doll",
-              note="第一次來時她非常耐打，攻略一致建議後期再回來。",
-              tips=["她會躲進鏡子裡——消失時先閃避",
-                    f"從鏡中衝出時是 {R}，完美閃避後反擊"]),
+        ("悲泣溪谷：驿站", "依游玩顺序", [
+            B("三张脸的诡异魔偶", "隐藏头目・【圣母像裂缝】铃铛", KG + "Aberrant-Three-Faced-Puppet.jpg", opt=True,
+              reward="（之后再来）",
+              note="【开端之地】往前，右边爬下梯子就是【圣母像裂缝】。裂缝里的头目现在打不过，攻略建议到庞镇之后再回来。"
+                   "戏梦山庄时期还会第二次遇到她：那时要用【炽刃】击败她，才能拿到黑伤双刃的另一半铸魂材料。",
+              tips=["她会钻进镜子里消失，出现前先准备闪避", f"从镜子冲出来的攻击是 {R}，完美闪避后反击"]),
+            I("影动猎杀仪", ["acc"], "离开【圣母像裂缝】铃铛，抓铁链跳过去，消灭敌人获得。",
+              "对攻击动作中的敌人伤害与杀气削减 +7%。", img=G("影动猎杀仪")),
+            I("血肉花（玉儿）", ["tale"], "抓绳子下去见到【玉儿】，对话接到异闻任务【血肉花】。",
+              "之后要把【双生血肉花】交给她，到庞镇再拿【鲜红的血肉花】，最后在【玉儿家】完成，获得饰品【开光玉佩】。",
+              img=G("对话接到异闻任务【血肉花(起点)】")),
+            I("黑伤双刃", ["weapon"], "沿溪水往前，武器架上。之后在【初见玉儿处】激活铃铛。",
+              "攻略提示：战斗中常切换武器可以完全恢复杀气。", img=G("前方拿到武器【黑伤双刃】")),
+            I("筋力绑带", ["acc"], "【初见玉儿处】铃铛往前过桥，消灭敌人获得。", "对敌人伤害 +5%。", img=G("筋力绑带")),
+            I("凶斧（四凶斧案卷）", ["tale"], "【残偶谷底】铃铛旁的书籍【四凶斧案卷(祸乱)】触发。",
+              "整个溪谷要收集多本四凶斧案卷（驿站前小院、斧老大关押处、远眺龙柱处、圣母像山洞、杀气塔下层），"
+              "最后到庞镇八卦阁顶楼交给【八卦童子】，获得铸魂材料【义结金兰之歃血刀】。", img=G("触发异闻任务【凶斧(起点)】")),
+            gB("痴狂暴徒-残钢", "痴狂暴徒：残钢", "主线・穿过【红丝线障壁】",
+               reward="武器【残钢刃】（出血）",
+               gear=[("武器", "初始的【黑伤】＋【黑伤双刃】即可")],
+               tips=["他正在和其他敌人打架，可以先让其他人消耗他再加入",
+                     "核心打法：按住格挡削减敌人杀气，敌人杀气归零破防时再全力输出",
+                     "格挡与间歇攻击会累积【精纯杀气】，用来放绝技，绝技敌人无法格挡"]),
+            I("长形黑伤", ["weapon"], "驿站铁匠【铁匠炼邪】旁的武器架。",
+              "铁匠铺可以升级武器。之后在梅谷湖可用【火刀：祝原】的材料升级成【炽刃】。", img=G("旁边拿到武器【长形黑伤】")),
+            I("难言之隐", ["tale", "miss"], "驿站铁匠铺对面被铁链锁住的院子，听守卫对话接到。",
+              "用【巨凶斧】劈开铁链 → 和驿站村口队长对话拿到【给副官的手令】→ 给远眺龙柱处房子里的蓝衣剑客看 → 回报队长 → "
+              "回到游戏起点，用抓钩过去见到顾凌然的尸体，开宝箱得到饰品【正气凌然】。",
+              miss="必须在悲泣溪谷完成，进入陆家村后任务失败。", img=G("听守卫对话接到异闻任务【难言之隐(起点)】")),
+            I("清理门户（房顶老头）", ["tale", "miss"], "驿站房顶上的【房顶老头】。",
+              "消灭【恶弓手营地】的弓箭手拿到【断弦的羽弓】，交回给他得到影之武装【羽弓】（可以射下高处的包裹）。",
+              miss="驿站的支线要在推进血色森林镜林之前做完，之后驿站众人全灭，就再也做不了。", img=G("和NPC【房顶老头】对话接到异闻任务")),
+            gB("斧老大-彭猛", "斧老大：彭猛", "主线・驿站后必经之路",
+               reward="影之武装【巨凶斧】（可破盾、劈开铁链）、书籍【四凶斧案卷(斧老大的绝笔信)】",
+               gear=[("武器", "【残钢刃】（出血）＋【黑伤双刃】")],
+               tips=[f"从斧老大开始，头目会使用 {BK} 招式：格挡会立刻清空自己的杀气，只能闪避",
+                     f"他的 {BK} 起手有两种：直接朝你冲过来，以及背对你直接砸地",
+                     f"他的红蓝招式很多，光 {BL} 就有三种；被动防御削减杀气仍是最稳的打法",
+                     "平时用黑伤双刃应对，敌人破防立刻换残钢刃堆出血"]),
+            I("坚岩护腕", ["acc", "miss"], "先和驿站房子里【吓破胆的正道弟子】（房顶老头旁边的房子）对话，打完斧老大后再对话一次；"
+              "然后到【斧老大关押处】铃铛，房子后面的坟前拿到。",
+              "未破防时受到伤害 -15%。", miss="打完血色森林后，本区所有人物相关内容都无法补救。",
+              img=G("房后的坟前拿到饰品【坚岩护腕】")),
+            I("见习医师（玉儿）", ["tale", "miss"], "打完斧老大后玉儿来到驿站铁匠铺，聊采药接取。",
+              "三种药材：【止血藤】（斧老大关押处东面河道里）、【凝脂叶】（远眺龙柱处过桥东面）、【金创草】（悲泣溪谷龙柱往西）。"
+              "交给玉儿得到饰品【香薰药盒】（药瓶治疗量 +20%）。",
+              miss="必须在悲泣溪谷完成，进入血色森林后任务失败。", img=G("接到异闻任务【见习医师(起点)】")),
+            I("止血藤", ["key"], "【斧老大关押处】东面先下到河道里。见习医师药材 1/3。", img=G("剧情道具【止血藤】")),
+        ]),
+        ("悲泣溪谷：杀气塔", "依游玩顺序", [
+            I("溪谷深处", ["purple"], "【溪谷平原入口】铃铛旁对话正道弟子接到。",
+              "之后在杀气塔顶用抓钩拿到【杀气塔底营地外门钥匙】，回来开门即完成，进入溪谷深处。", img=G("接到紫色任务【溪谷深处(起点)】")),
+            I("追杀令", ["acc"], "【恶弓手营地】走上阶梯开宝箱。", "对破防敌人伤害 +7%。", img=G("开宝箱得到饰品【追杀令】")),
+            I("羽弓", ["edge"], "消灭恶弓手营地的弓箭手后，回驿站交给房顶老头。", img=G("得到影之武装【羽弓】")),
+            gB("新娘阿花", "新娘阿花", "隐藏头目・杀气塔下",
+               opt=True, reward="武器【红妆鬼斩】、剧情道具【双生血肉花】",
+               gear=[("武器", "她是人偶，残钢刃的出血无效，换回【黑伤】＋【黑伤双刃】")],
+               note="杀气塔一层后面的地洞跳下去，滑下滑坡到底就是。【红妆鬼斩】是前期唯一的破盾主武器。",
+               tips=["她的普攻会在地上催生红花，几秒后爆炸，要远离（比场地原有的红花更鲜艳）",
+                     "场上红花会转圈缩小，合体时大范围爆炸，看到立刻远离",
+                     "她放出三朵追踪的白花，直接格挡就能化解；白花消失时她必定瞬移到你身边攻击",
+                     f"{BL} 只出现在普攻连段中，{R} 既在连招里也会单独放出"]),
+            I("双生血肉花", ["key"], "新娘阿花战斗后的喜堂处。传送回驿站交给玉儿。", img=G("剧情道具【双生血肉花】")),
+            I("隔绝楔子（友善鬼差）", ["tale"], "杀气塔顶【溪谷杀气塔顶】铃铛对话【友善鬼差】。",
+              "击败鬼差拿到【杀气炉探火孔开关】，到杀气塔一楼使用，拿到【浑源石】交给他。开关用完可以卸下来，后面还要用。",
+              img=G("接到异闻任务【隔绝楔子(起点)】")),
+            gB("“组织”猎杀者-追命", "“组织”猎杀者：追命", "主线・【大瀑布】铃铛",
+               reward="影之武装【追命锁镰】（抓钩）",
+               gear=[("武器", "【残钢刃】累积出血"), ("副武器", "【红妆鬼斩】可破盾")],
+               note="有两个阶段；在第二阶段死亡，回来会直接从第二阶段开始。",
+               tips=["一阶段：攻击很难破你的防，大多按住格挡就好，间歇反击",
+                     f"他的 {BL} 与 {R} 攻击距离很远，时刻注意他身上的颜色",
+                     "二阶段：他挂在半空挥锁链时必定带蓝光；精准格挡后可以瞬移到他身边连打",
+                     "他消失后会降下紫色锁链，横向跑出锁链范围；随后他冲过来，贴脸时点按格挡让他露出大破绽",
+                     "召唤龙卷风时立刻远离"]),
+            I("正气凌然", ["acc", "miss"], "【难言之隐】完成后，回到游戏一开始的起点，用抓钩过去见到顾凌然的尸体，开宝箱。",
+              "杀气连招的杀气消耗 -15%。", miss="难言之隐要在进入陆家村前完成。", img=G("开宝箱得到饰品【正气凌然】")),
+            I("锈蚀的龙形钥匙", ["key"], "【远眺龙柱处】鹤形铃铛旁宝箱。用来打开通往龙柱的隧道。", img=G("剧情道具【锈蚀的龙形钥匙】")),
+            I("凝脂叶", ["key"], "从远眺龙柱处过桥，到东面。见习医师药材 2/3。", img=G("剧情道具【凝脂叶】")),
+            I("溪谷龙柱（甄子丹）", ["purple", "true"], "用龙形钥匙开门穿过隧道，激活【悲泣溪谷龙柱】，调查龙头接到紫色任务【血脉觉醒】。",
+              "五根龙柱的挑战都打完才能达成真结局。现在打不过，变强后再来。", img=G("可找到【甄子丹龙柱】")),
+            I("金创草", ["key"], "悲泣溪谷龙柱往西。见习医师药材 3/3。之后回驿站交给玉儿。", img=G("剧情道具【金创草】")),
+            I("香薰药盒", ["acc", "miss"], "三种药材交给驿站的玉儿。", miss="进入血色森林前交。", img=A("香薰药盒")),
+            I("古甲残片", ["acc"], "引爆炸怪炸开杀气塔底，乘电梯到【红房子】铃铛，红房子左边。",
+              "红房子的门现在打不开（接到紫色任务【红房子】），要到很后期拿到【哑巴人偶的舌头】才能进去。", img=G("红房子左边捡到饰品【古甲残片】")),
+            I("浑源经脉仪", ["acc"], "【溪谷杀气塔底】铃铛旁，使用【杀气炉探火孔开关】。",
+              "完美格挡和完美闪避的判定时间 +15%，非常好用。", img=G("拿到饰品【浑源经脉仪】")),
+            W("离开悲泣溪谷之前", "<ul><li>【见习医师】三种药材交给玉儿（进入血色森林就失败）</li><li>【难言之隐】最好现在做完（进入陆家村就失败）</li>"
+              "<li>【坚岩护腕】已拿到</li><li>【清理门户】交了断弦的羽弓</li></ul>"),
         ]),
     ]))
 
-# ---------------------------------------------------------------- 2
+# =====================================================================
+# 第二章 血色森林
+# =====================================================================
 CHAPTERS.append(dict(
-    id="ch2", num="第二章", title="赤林", en="Crimson Forest",
-    cover=KG + "Fighting-Bai-Chilian.jpg",
-    lead="整個遊戲最大的「錯過不再」關卡。章末頭目 Bai Chilian 被擊敗後，Outpost 與盜賊營地的居民全部變成敵人，"
-         "所有相關支線、飾品一起失效。另外 Jing Ye 是 Yu'er 藥草任務的死線。",
+    id="ch2", num="第二章", title="血色森林", sub="飞贼营地・镜林",
+    cover=gb("双蛇夫人-白赤练")[0],
+    lead="最重要的错过点：溪谷驿站和飞贼营地还没做完的支线，要在往镜林推进（打拳痴铁狂、白赤练）之前做完，否则永久错过。"
+         "镜林的六朵【虚空】记忆之花集齐后，章末头目二阶段会有人来帮忙。",
     sections=[
-        ("赤林 Crimson Forest", "依遊玩順序", [
-            W("本章重要死線", "<ul><li><b>Jing Ye</b>：擊敗前必須把三種藥草交給 Yu'er（Apprentice Healer / Medicine Case）。</li>"
-              "<li><b>Bai Chilian</b>：擊敗後 Purge the Sect、Festering Secrets、Honor Among Thieves、A Healer's Mercy、Silent Wrap、Calming Gourd、Boulderguard、Feather Bow 全部失效。</li></ul>"),
-            I("Shieldbreaker Talisman", ["acc"], "斷橋之後、敵人旁的小鷹架上的寶箱。", "對盾牌傷害 +50%，打 Jing Ye 很好用。", img=pp(CF, 4)),
-            B("Hua Qianxiao", "The Sword Fanatic · Pangzhen Bridge Overlook", KG + "Fighting-Hua-Qianxiao.jpg", map=pp(CF, 7)[0],
-              reward="The Fanatic's Broken Blade（主武器）", weak="稍弱雷", resist="毒 / 水 / 出血",
-              gear=[("武器", "Jagged Steel ＋ Sanguine Twin（快攻）"),
-                    ("Phantom Edge", "Dread Axe（打斷喝酒）"),
-                    ("提示", "附近 Bell 先把武器升到 5 級")],
-              tips=["他開始拿葫蘆喝酒 = 準備兩段範圍攻擊 → 用 Dread Axe 打斷（藍光即可）直接打滿硬直",
-                    f"側旋橫掃是 {R}，完美閃避",
-                    "他的硬直條恢復很快，要持續施壓；倒地後他會擲劍，可能致命——一定要閃",
-                    "地板霹靂舞旋轉是大範圍攻擊，往外閃"]),
-            I("Quick Hand Zhang（牢籠中的人）", ["tale", "miss", "true"], "Trail of Cages Bell 附近被關在籠子裡的 Quick Hand Zhang，用附近機關放他出來。",
-              "他之後會在各地開藏身處（Quick Hand's Request），是真結局條件之一。同一個平台下層有 Cavalrybane 飾品。",
-              miss="必須在本章內救出，否則失去 Quick Hand Pendant 與整條真結局線。", img=pp(CF, 13)),
-            I("Cavalrybane", ["acc"], "救 Zhang 的那個鷹架平台下層。", "對騎乘敵人增傷，打 Jing Ye 第一階段好用。", img=pp(CF, 13)),
-            I("Crimson Forest Tunnel Crank", ["key"], "Outlaw Trap 前方洞穴內。用來進入地下通道找 Jing Ye。", img=pp(CF, "key-item-1")),
-            I("Honor Among Thieves", ["tale", "miss"], "擊敗坡上營火旁的敵人後接取。",
-              "把 Nimble Thief 的血書交給 Gentle Thief → 回答三個問題 → Silent Wrap。",
-              miss="Bai Chilian 被擊敗後失效。", img=pp(CF, 16)),
-            W("打 Jing Ye 之前", "Apprentice Healer 的三種藥草交了嗎？擊敗 Jing Ye 會讓這條支線與 Medicine Case 永久失敗。"),
-            B("Jing Ye", "The Outlaw · 主線", KG + "Fighting-Jing-Ye.jpg", map=pp(CF, 21)[0],
-              reward="Outlaw Warblade（主武器，抗打斷蓄力）", weak="稍弱冰、雷", resist="極抗火 / 毒 / 出血",
-              gear=[("武器", "Scarlet Wraithblade（削 Sha-Chi）＋ Jagged Steel 交替"),
-                    ("Phantom Edge", "Dread Axe（破盾、打掉藍條），有射程的破盾武器更好"),
-                    ("飾品", "Cavalrybane（騎乘增傷）、Shieldbreaker Talisman（對盾 +50%）")],
-              tips=["第一階段騎馬：開場跳擊＋三連擊一定要完美閃避，被打到很痛；其餘多數攻擊可以格擋",
-                    "左手袋子丟出的紅色飛彈：格擋與閃避混用，最後幾發格擋仍會受傷",
-                    "約 1/3 血後換持盾：用 Dread Axe 破盾，注意盾擊造成的出血累積",
-                    f"出現煙霧 = 遠跳，落地後必接一記快速 {BL} 斬擊；畫面變灰時預判彈反"]),
-            I("Secrets of the Baishan Sect（Lanlan）", ["tale", "miss", "true"], "巨大木橋上與 Lanlan 交談接取。",
-              "後續在第五章 Mandate Encampment 繼續（獎盃 The Last of Baishan）。",
-              miss="必須在 Bai Chilian 之前接取。", img=pp(CF, 23)),
-            I("Silent Wrap", ["acc", "miss"], "Gentle Thief 問你三個問題（Honor Among Thieves 獎勵）。",
-              miss="Bai Chilian 被擊敗後失效。", img=pp(CF, 25)),
-            I("A Healer's Mercy", ["tale", "miss"], "Thieves' Camp Bell 附近的 Yu'er。治療四名受傷盜賊：Outlaw Trap 附近洞穴兩名、"
-              "Cliffside Lodge 地窖（用 Cellar Crank）一名、Thieves' Camp 地牢一名。",
-              miss="Bai Chilian 被擊敗後失效（The Healer's Legacy 獎盃的一部分）。", img=pp(CF, 26)),
-            I("Quick Hand Pendant", ["acc"], "Thieves' Camp Bell 旁牆上的小洞穴（需先救出 Zhang）。", "單手武器傷害 +10%。", img=pp(CF, 27)),
-            I("Quick Hand's Request / The Wily Hare's Three Dens", ["tale", "true"], "與 Quick Hand Zhang 交談。",
-              "收集指定寶物交給他，各地藏身處會給不同獎勵（本區是 Flying Dagger）。", img=pp(CF, 28)),
-            I("Crimson Forest Cellar Crank", ["key"], "Cliffside Lodge Bell 爬梯子、穿過毒氣房間到陽台。", img=pp(CF, "key-item-3")),
-            I("Thieves' Camp Dungeon Key", ["key"], "跳到下方岩石平台上。", img=pp(CF, "key-item-4")),
-            I("Calming Gourd", ["acc", "miss"], "四名盜賊全部救治後，回 Thieves' Camp Bell 找 Yu'er。",
-              miss="Bai Chilian 被擊敗後失效。", img=pp(CF, 41)),
-            I("Flying Dagger", ["edge"], "收集三件寶物後交給 Quick Hand Zhang。", "遠程牽制用，打 Iron Fever 很實用。", img=pp(CF, 42)),
-            B("Stone Hand Iron Fever", "主線 · Mirrorwood Entrance 附近", KG + "Fighting-Stone-Hand-Iron-Fever.jpg", map=pp(CF, 45)[0],
-              reward="Iron Gauntlets（Phantom Edge，破盾）", weak="稍弱冰", resist="火 / 雷，極抗水",
-              gear=[("武器", "Outlaw Warblade（蓄力硬吃連段）＋ Jagged Steel（出血、Rampage）"),
-                    ("Phantom Edge", "Flying Dagger（遠距離風箏）"),
-                    ("提示", "資源夠的話武器升到 10 級")],
-              tips=["純近戰、沒有突進技，可以拉開距離用 Flying Dagger 消耗",
-                    f"空中翻身攻擊最後是無法格擋的 {R}——他停手開始升空時就閃",
-                    "他閒置時不要用蓄力攻擊，他會擋掉一部分並大量削你的 Sha-Chi"]),
-            B("Gold-Masked One #2", "可選 · Mirrorwood 長柱", None, map=pp(CF, 49)[0],
-              opt=True, reward="Miraculous Scabbard（飾品）＋ Bloodline Awakening 2/5",
-              gear=[("武器", "Outlaw Warblade（破防）"), ("飾品", "Shenji's Ring、Resonance Talisman")],
-              note="與龍雕像互動開始。難度高，可以之後再來。",
-              tips=["新增兩招會讓畫面變黑白——一定要閃避，格擋會吃光所有 Sha-Chi",
-                    f"蹲下發紅光 = 約 1 秒後衝刺，他一動就閃",
-                    "其餘招式與第一戰相同"]),
-            W("最後確認（Bai Chilian 之前）", "<ul><li>Purge the Sect / Feather Bow（交 Broken-String Bow）</li><li>Festering Secrets（用 Dread Axe 斬鐵鍊）</li>"
-              "<li>Honor Among Thieves / Silent Wrap</li><li>A Healer's Mercy / Calming Gourd</li><li>Boulderguard（墳墓）</li>"
-              "<li>Secrets of the Baishan Sect 已接取</li><li>Quick Hand Zhang 已救出</li></ul>"),
-            B("Bai Chilian", "Lady of the Twin Serpents · 章節頭目（兩階段）", KG + "Fighting-Bai-Chilian.jpg", map=pp(CF, 63)[0],
-              reward="White Serpent & Crimson Viper（主武器）、Resonance Talisman（飾品）", weak="火、冰、出血", resist="雷",
-              gear=[("武器", "Outlaw Warblade：她消失時蓄力，她出現時放出"),
-                    ("飾品", "Shenji's Ring（大量格擋時省 Sha-Chi）")],
-              tips=["至今最快的頭目，會在場上瞬移；空中攻擊時保持鎖定（她飛很高時可暫時解鎖鏡頭）",
-                    "側翻飛刀 → 格擋；背後兩下可格擋，之後有很長的反擊窗口",
-                    "她消失後會偷襲削 Sha-Chi，接近時閃避；三連擊最後的突刺可閃",
-                    f"二階段：五連揮 → 五連蛇擊 → {BL} 突刺，彈反後貼身打她倒地空檔",
-                    f"旋轉五連擊全部格擋，最後高位一擊看 {R} 閃避；起飛時離開風圈、閃落地再完美閃避反擊"]),
+        ("血色森林：飞贼营地", "依游玩顺序", [
+            I("虚空幻象", ["purple"], "进入血色森林见到虚空大人后自动接到。穿过迷雾森林再见到虚空大人时完成。", img=G("接到紫色任务【虚空幻象(起点)】")),
+            I("破盾符", ["acc"], "【荒废官道】沿官道走到头，消灭敌人开宝箱。", "对盾牌耐久削减 +50%。打亡命徒荆野很好用。", img=G("开宝箱得到饰品【破盾符】")),
+            gB("剑痴-花千笑", "剑痴：花千笑", "主线・【远眺庞镇之桥】铃铛旁的大桥",
+               reward="武器【痴者残剑】",
+               gear=[("武器", "把当前武器升到最高级")],
+               tips=["他会不断喝酒，喝酒时杀气值变成护盾值，喝完会把身边的玩家震开",
+                     "最稳的打法（逃课）：看到他喝酒，立刻跑到大桥另一头",
+                     "等他走过来时杀气值会慢慢降到底，冲上去把他打破防打一套",
+                     "他恢复后会再喝酒，重复同样的做法即可"]),
+            I("妙手小张（挂笼小道）", ["tale", "true"], "【挂笼小道】铃铛往前，笼子里的【妙手小张】，答应救他。",
+              "进右侧山洞，过桥右拐穿过洞窟，操作机关放下笼子，下去开宝箱得到饰品【斩骑符】，再打开笼子对话，接到收集任务【狡兔三窟】。"
+              "他之后在各地开藏身处（妙手空空），整条线和真结局有关。", img=G("答应救他")),
+            I("斩骑符", ["acc"], "放下妙手小张的笼子后，下去开宝箱。", "对骑兵伤害 +25%，打荆野前半段很好用。", img=G("开宝箱得到饰品【斩骑符】")),
+            I("盗亦有道", ["tale", "miss"], "【亡命徒陷阱】附近，西边往南消灭敌人得到书籍【江湖异闻线索(飞贼血书)】接到。",
+              "到飞贼营地桥头右边房子找【梁上君】，依序回答「偷了员外的玉带 → 蝴蝶 → 血书中并未提及，似是下落不明」，得到饰品【屏息绑带】。",
+              miss="飞贼营地的支线要在推进镜林前做完。", img=G("接到异闻任务【盗亦有道(起点)】")),
+            I("食物防腐罐", ["acc"], "两片【食物防腐护符残片】：一片在洞里（拿【坑道开关】处），一片在坑道底部过桥处，集齐自动合成。",
+              "中毒伤害 -30%。", img=G("饰品【食物防腐护符残片·之一】")),
+            gB("亡命徒-荆野", "亡命徒：荆野", "主线・【亡命徒陷阱】铃铛左拐穿过坑洞",
+               reward="武器【亡命斩马刀】（攻击吸血，攻略力推的“吸血流”核心）",
+               gear=[("武器", "【痴者残剑】喝酒进入微醺，可以远程操控飞剑"),
+                     ("影之武装", "【巨凶斧】蓄力破他的荆棘盾牌（必带）"),
+                     ("饰品", "【斩骑符】（前半段骑马）、【破盾符】（破盾并降低反伤）")],
+               tips=["走到他面前立刻喝酒进入微醺，在远处操控飞剑攻击，容错很高",
+                     f"离远一点会提高他单发 {BL} 的频率，格挡成功能直接打掉半管杀气",
+                     "远距离时他会召唤大量血滴子，会累积出血值，快速点按格挡挡掉大部分",
+                     "剩三分之二血会下马，用荆棘盾牌：普攻打到盾会受反伤，用巨凶斧蓄力三连重击破盾",
+                     f"下马后看到地上划出一长串烟雾，他会从烟雾后冲出来放 {BK}，熟悉节奏闪避"]),
+            I("白山密闻（小菊和兰兰）", ["tale", "true"], "过飞贼营地大桥前，在桥上遇到【小菊和兰兰】，要你去找孟小师妹。",
+              "在【悬崖山舍】地窖救出【孟小师妹】；后续延续到正道大营。", img=G("接到异闻任务【白山密闻(起点)】")),
+            I("救死扶伤（玉儿）", ["tale", "miss"], "飞贼营地的【玉儿】，聊林中的伤患接到。",
+              "找到四个受伤飞贼：飞鼠李耗子（亡命徒陷阱西面山洞）、瘦猴老周（坑道里）、泥鳅阿震（悬崖山舍地窖出口）、夜枭阿贵（飞贼营地地牢）。"
+              "回去交给玉儿得到饰品【静心小葫芦】。",
+              miss="飞贼营地的支线要在推进镜林前做完。", img=G("接到异闻任务【救死扶伤(起点)】")),
+            I("妙手在握", ["acc"], "飞贼口中说的、洞口挂着铜钱飞刀的地方找到【妙手小张】，对话获得。",
+              "单手主武器伤害 +10%。他的商店还卖【妙手千钧】（双手武器 +18%）与【妙手连环】（双持武器 +10%）。", img=G("对话妙手小张得到饰品【妙手在握】")),
+            I("悬崖山舍：救孟小师妹", ["tale"], "【悬崖山舍】铃铛，二楼阳台拿【山舍地窖开关】，进地窖拿【山舍机关密室开关】，打开牢房救出孟小师妹。",
+              "同时拿到【飞贼营地地牢钥匙】，回飞贼营地开地牢救夜枭阿贵。", img=G("楼上阳台拿到剧情道具【山舍地窖开关】")),
+            I("静心小葫芦", ["acc", "miss"], "救齐四个飞贼后，回飞贼营地交给玉儿。", "喝药能恢复破防状态，且 3 秒内不消耗杀气。",
+              miss="推进镜林（打拳痴铁狂）之后就做不了。", img=A("静心小葫芦")),
+            I("妙手飞刀", ["edge"], "血色森林的三个宝藏（掌门鼻烟壶、染血印章、古代弩机）找齐，交给妙手小张。", img=G("得到影之武装【妙手飞刀】")),
+            I("独孤绝印", ["acc"], "此时飞贼营地外大桥上，小菊已经疯掉杀了兰兰：击杀小菊获得（选“节哀”就不给）。",
+              "不急，进入陆家村后回来还有机会拿。", img=A("独孤绝印")),
+            W("推进镜林之前（重要）", "溪谷驿站和血色森林飞贼营地，没做完的支线现在就要做完，再往后推就会永久错过："
+              "<ul><li>见习医师 / 难言之隐 / 清理门户 / 坚岩护腕</li><li>盗亦有道 / 救死扶伤</li><li>白山密闻 已接取</li></ul>"),
+        ]),
+        ("血色森林：镜林", "依游玩顺序", [
+            gB("拳痴-铁狂", "拳痴：铁狂", "主线・【镜林入口】下方",
+               reward="影之武装【铁拳套】（破盾，蓄力打出“化境之拳”）",
+               gear=[("武器", "【亡命斩马刀】（攻击回血）")],
+               tips=["没有特别要注意的地方，攻击频率高但起手明显，格挡简单",
+                     "开局不断格挡，找时机补伤害，他会把自己的杀气打空",
+                     "剩三分之二血进入杀气迸发阶段，打法不变，注意连招最后的红光"]),
+            I("弦音（虚空的记忆之花）", ["tale", "true"], "镜林路上共六朵【虚空】记忆之花：其一（镜林入口往右前方隧道）、其二（遗冢地铃铛旁）、"
+              "其三（迷雾森林中间）、其四（迷雾消散处往下）、其五（镜林深处铃铛旁）、其六（铃铛旁通道往前）。",
+              "打章末头目前一定要集齐：白赤练二阶段【弦者】会出现帮你打，难度大降。", img=G("捡到记忆之花【虚空(其一)】")),
+            I("镜林龙柱（甄子丹）", ["purple", "true"], "岔路口右边出去激活【镜林龙柱】。血脉觉醒的第二根龙柱，变强后再来。", img=G("激活铃铛【镜林龙柱】")),
+            I("榕树之心", ["key"], "【迷雾消散处】往南经过码头，调查水面上的大树，消灭敌人获得。用来解锁技能树的特殊能力。", img=G("调查水面上的大树")),
+            I("镜林解谜", ["key"], "镜林里左、前、右各有一面镜子，进有哭泣声的那面：第一组顺序「左 → 前 → 右」，第二组「右 → 左 → 前」。", img=G("三次镜子的正确顺序为")),
+            gB("双蛇夫人-白赤练", "双蛇夫人：白赤练", "章节头目・【丝线缠绕的巨树】",
+               reward="武器【白蟒赤练】、饰品【弦音护符】（杀气值 +15%）、剧情道具【破损的幻术琵琶】",
+               gear=[("武器", "【亡命斩马刀】：攻击回血，技能等敌人破防、杀气快回满时再用")],
+               tips=["一阶段有两种打法：不断瞬移＋突进（很难反击，控制好自己的杀气），或站着连招（可以间歇反击）",
+                     f"突进阶段最怕她贴脸的 {BK}",
+                     "地面出现很多蛇形怪时专心躲避，它们不会转向，往一个方向跑即可",
+                     "二阶段招式类似追命：旋转突刺持续三下，防御会一下耗尽杀气，转上来时闪避",
+                     f"她慢慢往上飞，离开画面的瞬间立刻闪避，她会往下砸两次，第二次是 {R}",
+                     "场上出现很多召唤物时先打召唤物，击败两个她就会破防"]),
         ]),
     ]))
 
-# ---------------------------------------------------------------- 3
+# =====================================================================
+# 第三章 陆家村
+# =====================================================================
 CHAPTERS.append(dict(
-    id="ch3", num="第三章", title="盧村", en="Village of Lu",
-    cover=KG + "Fighting-Mu-Xiaokui.jpg",
-    lead="本章有兩個大陷阱：Young Mistress 的五條髮帶必須在搭電梯去章末頭目前收齊；章末頭目打完後，碼頭上的 Wild Oriole Sword 不撿就永遠拿不到。",
+    id="ch3", num="第三章", title="陆家村", sub="三人偶水井・回访溪谷与森林",
+    cover=gb("沫小葵")[0],
+    lead="拿到盾（拙壁盾）后，先回悲泣溪谷和血色森林收集隐藏区域。本章两组收集一定要做：五条【少主】红丝带（章末头目多一个阶段，送武器【妖锯】），"
+         "以及六朵【萤火】记忆之花（隐藏头目荡秽）。",
     sections=[
-        ("盧村 Village of Lu", "依遊玩順序", [
-            I("Jewel's Knot", ["acc"], "Jewel 正後方的寶箱。", img=pp(VL, 2)),
-            I("The Journey Home（Old Man Gen）", ["tale", "miss"], "Old Man Gen's Hideout Bell 附近與他交談。",
-              "後續會拿到 Old Man Gen's Brass Key；完成才會在第六章 Meigu Lake 出現 War Wagon（Phantom Edge）與獎盃 Together Till the End。",
-              miss="他提出請求時立刻答應。第一步最晚要在第四章 Town of Death 結束（Pangzhen 後巷）前完成。",
-              img=pp(VL, 7)),
-            I("Young Master Lan", ["tale", "miss"], "Young Master Lan's Hideout Bell 附近與他交談。",
-              miss="第一個目標必須在進入 Pangzhen 之前完成（獎盃 A Wanderer's Honor）。", img=pp(VL, 9)),
-            B("Zhuo Bi", "The Gatekeeper · 主線", KG + "Fighting-Zhuo-Bi.jpg", map=pp(VL, 10)[0],
-              reward="Bastion（Phantom Edge，可擋箭）", weak="雷，稍弱冰", resist="毒，極抗火 / 水，免疫出血",
-              gear=[("武器", "Outlaw Warblade 或 White Serpent & Crimson Viper"),
-                    ("Phantom Edge", "Dread Axe 或 Iron Gauntlets（破盾）"),
-                    ("飾品", "Shenji's Ring ＋ Resonance Talisman（一直擋也不會被破防）、Hunter's Insight"),
-                    ("道具", "Healing Gourd、Simmering Brew")],
-              tips=["巨盾必須先打破才能讓他硬直；大部分傷害來自處決，一次約 1/4 血",
-                    "他從硬直恢復時畫面變灰 → 滑行盾擊（削 Sha-Chi），閃避或用武技打斷",
-                    "盾砸連段：前幾下格擋，最後一下完美彈反",
-                    "後跳＋盾砸會召喚地刺，兩下都要閃；他攻擊後倒地時趁機打"]),
-            I("Young Mistress（髮帶 1/5）", ["tale", "miss"], "Zhuo Bi 戰場後方大門外，綁在樹上的髮帶。",
-              "其餘四條：有頂橋（Covered Bridge）柱子、地下路線（Yuzan 附近）的橋柱、以及通往章末頭目電梯前的兩處。",
-              miss="必須在搭電梯前往章末頭目前收齊五條，否則頭目沒有第三階段，失去 Fiend Saws、Fist Fragment: Core 等獎勵。",
-              img=pp(VL, 13)),
-            I("A Puppet's Wooden Heart", ["tale"], "Well of the Three Puppets 的 Songstress Puppet。",
-              "要在 Temple of Blue Fireflies 收集六朵 Firefly 記憶之花——收齊後才會出現隱藏頭目 Dusk。", img=pp(VL, 19)),
-            I("Mother's Talisman", ["acc"], "樓梯頂的建築裡，擊敗內部敵人後取得。", img=pp(VL, 22)),
-            B("Master Bi Yuan", "of the Tianxuan Sect · 主線", KG + "Fighting-Master-Bi-Yuan.jpg", map=pp(VL, 33)[0],
-              reward="Tianxuan Bronze Sword（主武器）、Sha-Chi Amber", weak="火，稍弱毒", resist="雷",
-              gear=[("武器", "火屬性武器 / 附魔"), ("提示", "貼身打，離太遠他會一直放飛劍")],
-              tips=["很多招式會打破你的 Sha-Chi：先閃避，再彈反接下來的追擊",
-                    "保持近距離，避免遠程劍氣"]),
-            I("Livingwood Talisman", ["acc"], "從庭院跳下後，下一個小區域的房子裡。", img=pp(VL, 39)),
-            I("Arrowward", ["acc", "miss"], "把 Thief's Manual 交給門邊的 Wounded Thief。",
-              "Thief's Manual 在 Crimson Forest 的 Zhang 藏身處入口附近，需要本章拿到的 Bastion 才能取得——拿到 Bastion 後馬上回去。",
-              miss="這名盜賊會隨劇情推進死亡，越早交越好。", img=pp(VL, 41)),
-            B("Master Bi Hai", "of Kuye Temple · 主線", PG + "bi-yuan-boss-550x309.jpg", map=pp(VL, 42)[0],
-              reward="Kuye Temple Prayer Beads（Phantom Edge）、Arrowward 相關", weak="火，稍弱毒", resist="雷",
-              gear=[("Phantom Edge", "破盾類（Dread Axe / Iron Gauntlets）——破金鐘必備")],
-              tips=[f"快速連段之後接 {R}",
-                    "他會罩上金鐘並召喚三個銅人：擊倒銅人才能破鐘，需要破盾武器"]),
-            B("Acolyte Yanru", "可選 · Terraces 下方的稻草人", None, map=pp(VL, 48)[0], opt=True,
-              reward="Yanru's Blazing Mask（Acolyte 面具 1/4）", weak="冰、水", resist="毒，免疫火",
-              note="四個 Acolyte 面具是 Meigu Lake 隱藏區與真結局的必要條件。",
-              tips=["火系敵人：火球、跳擊、分身雨、火圈、袖火", "帶冰或水屬性武器"], true=True),
-            I("Agarwood Prayer Beads", ["acc", "miss"], "與 Stately Monk 交談，選「Do not believe」，再把 Prayer Beads 交給他。",
-              "Prayer Beads 來自泣溪谷 Outpost 商店旁的和尚（之後的回訪）。",
-              miss="選「Believe」他會變成石頭，飾品永久消失。", img=pp(VL, 53)),
-            I("Dahuang", ["tale"], "Survivors' Courtyard 後建築裡床上的 NPC。", img=pp(VL, 55)),
-            I("Fine Thread", ["acc"], "收集三件寶物後，在 Zhang's Hideout（Village of Lu）交給 Quick Hand Zhang。", img=pp(VL, 58)),
-            I("A Puppet's Wooden Heart（飾品）", ["acc"], "完成前一目標後回 Temple of Blue Fireflies Bell 找 Puppet Songstress。", img=pp(VL, 59)),
-            B("Dusk", "The Puppeteer · 隱藏頭目", KG + "Fighting-Dusk.jpg", map=pp(VL, 61)[0], opt=True,
-              reward="Puppeteer's Bell、Illusory Pipa Head（真結局用的琵琶零件）", weak="無特別弱點",
-              note="收齊六朵 Firefly 記憶之花後，才會在 Broken Puppet Pit Entrance 後的峽谷（漁夫旁）出現。",
-              tips=["先處理召喚物，再格擋他的射擊", "二階段他會分裂成兩個"], true=True),
-            B("Yuzan", "No. 3 Musician Puppet · 井底主線", KG + "Fighting-Yuzan.jpg", map=pp(VL, 65)[0],
-              reward="Heartrend Pipa（Phantom Edge）",
-              tips=[f"樂器發出 {R} 時閃避",
-                    "白色光球可以彈反，把藍色彈幕打回去",
-                    "她消失到場地中央時，退到外圈並閃避大型灰色光球"]),
-            I("Cui", ["tale"], "Puppet Testing Grounds Bell 附近哭泣的小孩人偶。",
-              "要在最終章 The Crusher and the Saw 之前完成，才能拿到 Baishan Headband。", img=pp(VL, 67)),
-            I("Old Man Gen's Brass Key", ["key"], "從 Puppet Testing Grounds Bell 打開走私隧道後，回去接受 Old Man Gen 的下一個請求。",
-              img=pp(VL, "key-item-1")),
-            I("Remnant Spark Cage", ["acc"], "Smuggler's Treasure Cellar Bell 後的地窖寶箱（Tunnel Cage Key → Cellar Key）。", img=pp(VL, 72)),
-            W("搭電梯前往章末頭目之前", "Young Mistress 五條髮帶收齊了嗎？否則頭目第三階段不會出現，Fiend Saws 等獎勵直接錯過。"),
-            B("Mu Xiaokui", "Young Mistress of the Order · 章節頭目（三階段）", KG + "Fighting-Mu-Xiaokui.jpg", map=pp(VL, 68)[0],
-              reward="Wild Oriole Sword；第三階段：Fiend Saws、Fist Fragment: Core、Puppet No. 44's Eye",
-              gear=[("Phantom Edge", "破盾類（第三階段的護衛要破防）")],
-              tips=["雙遠程斬擊接飛行物追擊：完美閃避後有很長的反擊窗口",
-                    "削 Sha-Chi 的突刺後會接劍舞＋旋轉投擲；高跳先閃跳擊，再閃接下來的突刺",
-                    f"二階段：{R} 快速衝刺開啟無法打斷的連段，完美閃避；注意紫色裂縫生成的幻影",
-                    "第三階段（需完成 Young Mistress）：Iron Fiend 與 Jade Dancer 2 打 1，盡量讓兩人都在視野內、分開處理",
-                    f"Iron Fiend 的高抬膝與拍手後接 {R}"]),
-            I("Wild Oriole Sword", ["weapon", "miss"], "擊敗章末頭目後，前方碼頭上。",
-              miss="離開碼頭後電梯會壞掉，無法再回來。旁邊樹下寶箱的 Sha-Chi Amber Fragment 也一起拿。",
-              img=pp(VL, 69)),
+        ("陆家村：入村", "依游玩顺序", [
+            I("珍玩妖织", ["acc"], "【梦醒之地】过桥见到【珍妖】（可以升级饰品），她旁边的宝箱。", "生命值 +10%。", img=G("开珍妖旁的宝箱得到饰品【珍玩妖织】")),
+            I("幻术琵琶", ["purple", "true"], "【梦醒之地】桥头捡到书籍【江湖异闻线索(白赤练的手记)】接到。",
+              "要集齐琴头、琴背、琴弦三个部件交给庞镇的【二姐幻鬼】修好。修好后才能进入枷笼山。", img=G("接到紫色任务【幻术琵琶(起点)】")),
+            I("归途（老根头）", ["tale", "miss"], "【老根头藏身处】铃铛，对话【老根头】接到。",
+              "打完章末头目后，回来答应帮他，拿到【老根头家的黄铜钥匙】；到庞镇【老根头家】拿【落灰的老旧木梳子】回来交给他（成就【白首不相离】）。",
+              miss="他提出请求时要答应。没完成的话，梅谷湖的老根头剧情和相关影之武装会错过。", img=G("对话老根头接到异闻任务【归途(起点)】")),
+            I("一个不留（车夫）", ["tale"], "同时得知玉儿出事，接到【一个不留】。",
+              "之后回溪谷驿站和血色森林飞贼营地，那里的人都死了（见下方回访）。", img=G("接到异闻任务【一个不留(起点)】")),
+            gB("守门人-拙壁", "守门人：拙壁", "主线・老根头藏身处往前，过石桥",
+               reward="影之武装【拙壁盾】（可挡箭雨机关）",
+               gear=[("影之武装", "【铁拳套】升到最高级")],
+               tips=["打法特别简单：铁拳套消耗一个精纯杀气可连续蓄力攻击三次，前摇短、大幅削减杀气",
+                     "他破防立刻处决，重复即可",
+                     "也可以用巨凶斧蓄力破盾再处决"]),
+        ]),
+        ("回访：悲泣溪谷・血色森林", "拿到盾之后马上回去", [
+            I("一串念珠", ["key"], "传送回溪谷驿站，这里的人都死了。击杀商人旁的和尚获得。", "之后在陆家村【幸存者小院】交给和尚。", img=G("得到剧情道具【一串念珠】")),
+            I("神机指环", ["acc"], "驿站西面之前被拦住的路，过桥往南高处，进洞激活【圣母像山洞】，出洞开宝箱。",
+              "按住格挡时杀气消耗 -20%。旁边还有【彩色的风车】和四凶斧案卷(谋士密信)。", img=G("开宝箱拿到饰品【神机指环】")),
+            I("独孤绝印（补拿）", ["acc"], "飞贼营地外大桥上，击杀发疯的小菊。", img=G("击杀小菊得到饰品【独孤绝印】")),
+            I("飞贼的秘籍", ["key"], "飞贼营地去找妙手小张的路上，解决最后一个敌人。之后在陆家村交给受伤的飞贼。", img=G("剧情道具【飞贼的秘籍】")),
+            I("机簧护心镜", ["acc"], "持盾通过飞贼营地地牢下层的箭雨机关，开宝箱。", "按住防御时杀气自然流逝 -20%。", img=G("开宝箱得到饰品【机簧护心镜】")),
+        ]),
+        ("陆家村：三人偶水井", "依游玩顺序", [
+            I("湖心秘密（萤火的记忆之花）", ["purple", "true", "miss"], "过桥左拐捡到记忆之花【萤火(其一)】接到。",
+              "本区六朵萤火记忆之花：其一（持盾头目处左拐）、其二（桥下河道北端）、其三（农田旁的庙）、其四（机关巨怪残骸楼下洞里）、"
+              "其五（大廊桥东面崖边）、其六（幽蓝萤火之庙房子里）。集齐后驱散迷雾去打隐藏头目【操偶师：荡秽】。",
+              miss="【湖心秘密】是真结局必要条件，必须在进入戏梦山庄前完成（后续在梅谷湖）。", img=G("左拐捡到记忆之花【萤火(其一)】")),
+            I("兰家大少（兰公子）", ["tale", "miss"], "过桥左侧两条路往前，到【兰公子藏身处】对话【兰公子】接到。",
+              "到庞镇他家门口完成，得到饰品【碧血云天】、成就【浪子侠心】。", miss="第一个目标要在进入庞镇前完成。", img=G("对话兰公子接到异闻任务【兰家大少(起点)】")),
+            I("少主（红丝带 1/5）", ["tale", "miss"], "过门后桥头树上沐小葵留下的红丝带。",
+              "其余：幽蓝萤火之庙前树枝（2）、大廊桥破除红丝线后对面左侧（3）、圣母雕像场铃铛（4）、水井之下铃铛往木桥右侧（5）。",
+              miss="乘升降梯去章末头目前要集齐五条，否则没有隐藏阶段，拿不到武器【妖锯】。", img=G("看到桥头树上少主沐小葵留下的红丝带")),
+            I("入梦祈子 → 慈母护符", ["tale", "acc"], "三人偶水井东面院子对话【女织】接到；水井西面往上，屋里击杀特别高的人偶。",
+              "饰品【慈母护符】：被破防时恢复 10% 生命值。", img=G("得到饰品【慈母护符】")),
+            I("人偶木心", ["tale", "acc"], "【幽蓝萤火之庙】对话【歌女人偶】接到。",
+              "幸存者小院找到书生沛郎（他会吓跑）→ 梯田找到沛郎尸体拿书信 → 回幽蓝萤火之庙查看歌女人偶，得到饰品【人偶木心】。", img=G("和NPC【歌女人偶】对话接到异闻任务")),
+            I("妙手小张（陆家村）", ["tale"], "农田东面下河道往北的密道，【陆家村小张藏身处】。",
+              "陆家村三个宝藏（洞房花烛、尚未蒙花的雕像、双童玉佩）找齐交给他，得到饰品【细线球】（召唤物伤害 +50%）。", img=G("找到NPC【妙手小张(陆家村)】")),
+            gB("天玄派-毕远掌门残躯", "天玄派：毕远掌门残躯", "主线・【雕像场前】铃铛",
+               reward="武器【天玄青铜剑】；战后【圣母雕像场】铃铛上有红丝带",
+               gear=[("武器", "【亡命斩马刀】＋【铁拳套】压制"), ("切换", "【黑伤双刃】或【白蟒赤练】快速累积精纯杀气")],
+               tips=["至今最简单的头目之一：攻速不快、攻击欲望很低，可以主动进攻",
+                     "他防御时用铁拳套蓄力拳把他打飞，再用斩马刀回血输出",
+                     "血量低时直接用斩马刀技能压住他吸血"]),
+            I("活木符", ["acc"], "【飞贼藏宝地窖】铃铛往南下层，房子里开宝箱。", "流血、吸血对人偶、金身、幻体也有 50% 效果。", img=G("开宝箱得到饰品【活木符】")),
+            I("避箭护符", ["acc", "miss"], "出【飞贼密道】见到受伤的飞贼，交出【飞贼的秘籍】获得。",
+              "受到的远程伤害与杀气削减 -20%。", miss="这个飞贼会随剧情死去，尽早给。", img=G("交出之前在血色森林飞贼营地获得的飞贼秘籍")),
+            gB("枯叶寺-碧海大师残躯", "枯叶寺：碧海大师残躯", "主线・【飞贼密道入口】旁",
+               reward="影之武装【苦叶寺珠串】（召唤僧人助战）",
+               gear=[("影之武装", "【铁拳套】三连击破盾")],
+               tips=["开战立刻冲上去先打，他会瞬移并用金钟罩困住自己，同时刷出三个僧侣",
+                     "第一波僧侣出来时他不会攻击，专心打僧侣；全部击败后他出来并在周围爆炸，要闪",
+                     "第二波僧侣会带武器，他也会远程攻击，伤害比小怪高很多",
+                     "用铁拳套三连击尽量打到更多敌人，破盾越快越好打"]),
+            gB("灭法之法-炎茹", "灭法之法：炎茹（稻草人）", "可选・【梯田】的稻草人",
+               opt=True, true=True, reward="剧情道具【炎茹的炽焰面具】（四个面具之一）",
+               gear=[("饰品", "觉得难打可以等庞镇拿到【辟火符】再来")],
+               note="四个灭法之法面具是梅谷湖隐藏区域与真结局的必要条件。",
+               tips=["火系敌人，火伤很痛，带防火饰品"]),
+            I("沉香念珠", ["acc", "miss"], "【幸存者小院】对话旁边的和尚，选择「不信奉」，交出驿站和尚掉落的【一串念珠】。",
+              "破防时杀气回复 +15%，同时完成【一个不留】。", miss="选「信奉」就拿不到。", img=G("得到饰品【沉香念珠】")),
+            I("大黄（猎户）", ["tale"], "幸存者小院北面房子对话猎户，得到【猎户的犬铃】。在庞镇【戏声缥缈的水塘】附近找到大黄。", img=G("接到异闻任务【大黄(起点)】")),
+            gB("操偶师-荡秽", "操偶师：荡秽", "隐藏头目・【残偶弃置坑口】往下跳",
+               opt=True, true=True, reward="影之武装【操偶钤铛】、剧情道具【幻术琵琶的琴头】",
+               note="集齐六朵萤火记忆之花后，到【幽蓝萤火之庙】主屋尽头驱散迷雾才会出现。",
+               gear=[("武器", "【亡命斩马刀】吸血流"), ("影之武装", "【苦叶寺珠串】召唤小兵帮忙")],
+               tips=["一阶段会召唤很多人偶小兵，还会用大型人偶部件干扰你",
+                     "血量过半会召唤分身：带红眼睛的是假身，全力打黑脸真身",
+                     "他唯一的杀招：召唤大型半身人偶朝你掌击，及时左右侧闪"]),
+        ]),
+        ("陆家村：水井之下", "依游玩顺序", [
+            gB("三号-乐偶师-玉瓒", "三号：乐偶师：玉瓒", "主线・【水井之下】过河",
+               reward="影之武装【催心琵琶】",
+               gear=[("武器", "【亡命斩马刀】"), ("影之武装", "【苦叶寺珠串】召唤僧人，破韧很强")],
+               tips=["她的白色光球可以精准格挡反弹回去，离远一点反弹大量白球伤害很高",
+                     "她在地上召唤有吸力的球体时，立刻跑到场地边缘",
+                     "原地被红色特效包裹蓄力时，贴脸等前摇过后闪避，再继续追击"]),
+            I("小翠", ["tale"], "【人偶试验场】入口右边的人偶，对话小翠得到【小翠的红头绳】。",
+              "后续在枷笼山救出她的爷爷，最后在断魂山找到她的父母。完成后打力者和锯者时会多拿到奖励。", img=G("对话小翠获得剧情道具【小翠的红头绳】")),
+            I("梦差幻境", ["purple", "true"], "人偶试验场东面岔路的传送门，进入接到。", img=G("进入传送门接到紫色任务【梦差幻境(陆家村)】")),
+            W("乘升降梯去【湖畔】之前", "五条少主红丝带集齐了吗？没集齐的话沐小葵没有隐藏阶段，拿不到武器【妖锯】。"),
+            gB("沫小葵", "组织少主：沐小葵", "章节头目・【湖畔】",
+               reward="武器【乱莺剑】（码头）；隐藏阶段：武器【妖锯】、铸魂材料【拳心碎片・核】、【四十四号人偶的独眼】",
+               gear=[("武器", "【亡命斩马刀】与【苦叶寺珠串】升到最高级，加点优先【精纯杀气】上限"),
+                     ("饰品", "【妙手千钧】、【筋力绑带】、【浑源经脉仪】")],
+               tips=["正常攻防，靠精准闪避与格挡削杀气、叠精纯杀气，危急时用斩马刀技能吸血",
+                     f"二阶段她会召唤护卫的幻影攻击你，小心 {BK}",
+                     "二阶段打到剩三分之一血，她召唤玉妖、铁鬼两个护卫（隐藏阶段）",
+                     "玉妖用腿上的刀刃攻击，很灵活还有远程；铁鬼基本是铁狂的换皮，优先打铁鬼"]),
+            I("乱莺剑", ["weapon"], "打完沐小葵后，码头上。", "注意：乘升降梯下去后升降梯会坏掉，但之后可以从湖面区域回来。顺手拿了比较省事。",
+              img=G("在码头捡到武器【乱莺剑】")),
+            I("老根头家的黄铜钥匙", ["key"], "人偶试验场开门后，回去告诉老根头和兰公子通道开了；答应帮老根头。", img=G("得到剧情道具【老根头家的黄铜钥匙】")),
+            I("暗源小笼", ["acc"], "通向庞镇的密道里，牢房的盗贼给【陆家村村舍地窖钥匙】，传送到【飞贼藏宝地窖】开门开宝箱。", img=G("开宝箱得到饰品【暗源小笼】")),
         ]),
     ]))
 
-# ---------------------------------------------------------------- 4
+# =====================================================================
+# 第四章 庞镇
+# =====================================================================
 CHAPTERS.append(dict(
-    id="ch4", num="第四章", title="龐鎮", en="Pangzhen",
-    cover=KG + "Fighting-Wu-Xuan.jpg",
-    lead="大型城鎮，支線密度最高。重點：打 Flame 前一定要先打可選頭目 You Loong 拿到 You Loong's Deluge；"
-         "從碼頭出發前往 Meigu Lake 前先確認 Old Man Gen 的支線進度。",
+    id="ch4", num="第四章", title="庞镇", sub="东部主街・西部後街",
+    cover=gb("堕落将军-武轩")[0],
+    lead="支线最多的一章。打【舞狮尊主：烈焰】前要先打【水行帮主：游龙】拿到【游龙头】。"
+         "有两个必须“在变异前击杀”的人物，记忆之花才会出现，做之前先存档。拿到烈焰狮头后先别开船去湖里。",
     sections=[
-        ("龐鎮 Pangzhen", "依遊玩順序", [
-            I("Flameward", ["acc"], "South Gate Bridge Bell 旁上樓梯的小陽台寶箱。", "火焰傷害與燃燒累積 -50%，下一個頭目 Blaze 必備。", img=pp(PZ, 6)),
-            B("Blaze", "Shadow Warden Captain · 主線（兩階段）", KG + "Fighting-Blaze.jpg", map=pp(PZ, 7)[0],
-              reward="Fire Meteor（Phantom Edge）、Soulrend Storeroom Key", weak="—",
-              gear=[("飾品", "Flameward（剛剛那個寶箱）")],
-              tips=["側身旋轉六連鎖鏈 → 按住格擋，並在演出提示時閃避跳擊，可造成大硬直",
-                    "鎖鏈連段後的地面重擊是範圍攻擊，閃開；與鎖鏈保持距離",
-                    "二階段吐息後會跳撲成一擊抓取——閃避突進；頭頂鎖鏈形成火圈時跳過邊緣",
-                    "小技巧：他會召喚兩隻小兵，打其中一隻直到出現處決提示，處決會同時秒殺兩隻（擊殺周圍敵人也能回血）"]),
-            I("Crimson Flesh Lily", ["key"], "Blaze 戰鬥後正前方。", img=pp(PZ, "key-item-1")),
-            I("Crimson Resolve", ["acc"], "Young Master Lan 交給你 Lan Manor Key 後，進入 Lan Manor。", img=pp(PZ, 15)),
-            B("Cavalrybane", "Elite Shadow Warden · 主線", KG + "Fighting-Cavalrybane.jpg", map=pp(PZ, 18)[0],
-              reward="Armybreaker（主武器）",
-              tips=[f"空中旋轉之後的 {BL} 彈反", "他衝鋒時先格擋，再閃避接著的踢擊"]),
-            I("The Sword and the Way", ["tale"], "Cavalrybane 戰場後方建築下的酒館，水邊的 Daoist Bi Di。", img=pp(PZ, 21)),
-            I("The Undying Heroic Spirit", ["tale", "miss"], "Myst's Tavern Bell 後大房間的 Purple-Robed \"Wolf\" Leader。",
-              "要找到六位 Mandate 大師的英靈。",
-              miss="每位大師跪下時要立刻處決；等約 10 秒他會變身，失敗三次整條支線失敗。", img=pp(PZ, 23)),
-            I("The Star Performer", ["tale"], "Myst's Tavern 的 Leading Opera Actress。完成後換到 Dance Fan。", img=pp(PZ, 24)),
-            I("The Cube", ["tale"], "Myst's Tavern 的漁夫（Fisherman），後續在 Meigu Lake 收集碎片。", img=pp(PZ, 25)),
-            I("Manor Medicine Pot", ["acc"], "Huang Manor（鑰匙找 Myst's Tavern 的 Shopkeeper Niu）內四個碎片：Chain、Handle、Body、Lid。", img=pp(PZ, 28)),
-            I("A Brother Once More", ["tale"], "與 Manor Medicine Pot 同一個房間。", img=pp(PZ, 29)),
-            I("Dance Fan", ["acc"], "取得 Tattered Dance Fan 後交給 Myst's Tavern 的 Leading Opera Actress。", img=pp(PZ, 31)),
-            B("Wu Xuan", "The Fallen General · 主線（兩階段）", KG + "Fighting-Wu-Xuan.jpg", map=pp(PZ, 35)[0],
-              reward="Wolfjaw（Phantom Edge，優秀的破盾武器）",
-              gear=[("武器", "高破防（Guard Break）武器與招式"), ("飾品", "增加破防值的飾品"),
-                    ("Phantom Edge", "破盾類")],
-              tips=["他的 Guard 條很長，必須打破才能處決；完美彈反削得最快",
-                    f"{BL} 收尾：鏟子最後一揮、磨錘後的重掃、連續重砸的最後一擊、頭上轉錘",
-                    f"兩招不可擋：四連段最後一下、近身揮臂抓取（{R} 閃避）",
-                    f"二階段紫焰加傷並追加範圍與追蹤彈；紫爆＋旋風揮最後是 {BL}"]),
-            I("Congeal Talisman", ["acc"], "Blackstone 掉落點後的巷子盡頭。", img=pp(PZ, 43)),
-            B("Gu Wanyue", "The Wailing Wraith · 主線", PG + "mu-xuan-boss-550x309.jpg", map=pp(PZ, "key-item-9")[0],
-              reward="Fanatic's Fragment: Fixation（關鍵道具）",
-              tips=["她很難追蹤，全程保持鎖定",
-                    f"發出紫光時射出的投射物是 {BL}，彈反",
-                    "之後場地變暗：持續格擋並打破她的防禦"]),
-            I("Mandate Encampment Outer Gate Key", ["key"], "Gu Wanyue 的井後、棺材旁。",
-              "→ 第五章 Mandate Encampment（可選，但真結局必要）就此開放，可以現在去或稍後再去。", img=pp(PZ, 50)),
-            B("Xie Qiudong", "The Divine Healer · 主線", PG + "healer-boss-550x309.jpg",
-              reward="Everflow（藥品）",
-              tips=["他會治療被紅線連起來的敵人——先殺掉連線的人",
-                    f"單手舉起並停頓 = {R} 要來了",
-                    "清完連線者後集中打本體"]),
-            I("Thunderward", ["acc"], "Green Serpent House Bell 左側建築盡頭的寶箱。雷電減傷。", img=pp(PZ, 60)),
-            W("Serpent Houses 注意", "Green Serpent House 的門打開前，先把各 Serpent House 的收集品拿齊（PBZ Codex 標註為錯過點）。", info=True),
-            B("You Loong", "Leader of the Blackwater Crew · 可選（但打 Flame 前必打）", KG + "You-Loong.jpg", map=pp(PZ, 63)[0], opt=True,
-              reward="You Loong's Deluge（Phantom Edge，水——可熄滅 Flame 的火焰）",
-              tips=["注意水下的氣泡位置",
-                    f"三叉戟旋轉後接 {R}",
-                    "噴水的紅光攻擊：閃開，或攻擊他來打斷"]),
-            I("Kin Against Kin", ["tale"], "從 Lion Dance Hall Bell 用鉤索到橋上再往左。", img=pp(PZ, 66)),
-            B("Chang Hong", "The Thunder Spear · 主線（第二階段騎馬）", KG + "Fighting-Chang-Hong.jpg", map=pp(PZ, 69)[0],
-              reward="Thunder Spear（Phantom Edge）、Heavy Lion Hall Gate Key",
-              tips=["劍掃之後地面會放電，閃開", "旋轉跳躍時完美閃避", "第二階段騎馬：馬抬起前蹄時完美閃避"]),
-            I("Blessed Jade Pendant", ["acc"], "Chang Hong 戰場前方的建築，救出老人。需要泣溪谷的 Flesh Lily。", img=pp(PZ, 70)),
-            B("Flame", "The Mask-Bound Lion Dance Grandmaster · 主線（兩階段）", KG + "Fighting-Flame.jpg", map=pp(PZ, "key-item-12")[0],
-              reward="Dormant Flaming Mane（由 Lei Dang 在 Jingyang Hall 修復成 Flaming Mane）", weak="水",
-              gear=[("Phantom Edge", "You Loong's Deluge（熄滅火焰 Buff，移除爆炸並封印部分招式）"),
-                    ("飾品", "Flameward")],
-              tips=["四連踩第四下可彈反；挑釁後的砸地可彈反；旋風砸地不可擋要閃；頰刃旋轉第二下可彈反",
-                    "火球閃藍光：格擋反彈回去造成大量 Sha-Chi 傷害",
-                    f"二階段在柱子上：快速紅光落下不可擋要閃；較慢的 {BL} 跳躍可以精準格擋彈開",
-                    "舞獅階段：撿綠色錦囊提高 Sha-Chi 傷害，削空他的 Sha-Chi 讓他暈眩；處決最後一名弟子進入該階段"]),
-            I("Goldblaze", ["edge"], "在 Zhang's Hideout（Pangzhen）與 Quick Hand Zhang 交談。", img=pp(PZ, 78)),
-            I("Flaming Mane", ["edge"], "Jingyang Hall Bell 後的門內，Lei Dang 幫你修復。可燒掉樹枝路障。", img=pp(PZ, 79)),
-            I("Formless Divine Mirror", ["acc"], "Black Hill Pavilion Bell 附近。", img=pp(PZ, 81)),
-            I("A Mother's Heart", ["tale"], "從 Backstreet Cellar Crank 平台順梯子下去。", img=pp(PZ, 82)),
-            B("Acolyte Lei Ting", "可選 · Old Man Gen's House 下方稻草人", None, map=pp(PZ, 88)[0], opt=True,
-              reward="Leiting's Thunder Mask（Acolyte 面具 2/4）", true=True,
-              note="Flame 之後即可挑戰。", tips=["雷系敵人，帶 Thunderward 減傷"]),
-            B("Soulclaimer", "Elite Shadow Warden · 主線", KG + "Fighting-Soulclaimer.jpg", map=pp(PZ, 91)[0],
-              reward="Parting Hooks（主武器）",
-              tips=[f"他跑開再旋轉衝向你之後，彈反 {BL}"]),
-            W("搭船離開 Pangzhen 之前", "<ul><li>The Journey Home 第一步必須已完成，否則第六章 War Wagon 與 Old Man Gen 劇情會錯過。</li>"
-              "<li>Young Master Lan 第一目標應已完成。</li><li>建議先完成第五章 Mandate Encampment。</li></ul>"),
+        ("庞镇：东部主街", "依游玩顺序", [
+            I("辟火符", ["acc"], "出酒窖激活【南门廊桥】，铃铛和牌坊之间的房子开宝箱。", "火焰伤害 -40%。马上升级装上，下一个头目用火。", img=G("开宝箱得到饰品【辟火符】")),
+            gB("鬼差队长-火流星", "鬼差队长：火流星", "主线・【南门廊桥】往上的大楼梯",
+               reward="影之武装【火流星】、剧情道具【鲜红的血肉花】",
+               gear=[("武器", "【亡命斩马刀】吸血流"), ("饰品", "第四个饰品换成【辟火符】"), ("影之武装", "【苦叶寺珠串】召唤援兵")],
+               tips=[f"一阶段：用锁链中远距离攻击，攻速不快，多练精准格挡；{R} 抓取都在连招末尾",
+                     "甩锁链转身的抓取没有红光提示，但没有伤害，只会打断你的节奏",
+                     "血量少三分之一后会有鬼差小兵加入，用苦叶寺珠串召援兵减压",
+                     f"二阶段被控制神志，{R} 被抓到（不是满血）就是一套秒杀：不要弹刀，看到红光专心闪避"]),
+            I("舞狮尊主（记忆之花 1/6）", ["tale"], "【市集】铃铛旁酒馆座椅上，触发收集任务【舞狮馆深处】。",
+              "六朵：市集酒馆（1）、黄家宅邸前路口西边推车（2）、幻鬼酒馆旁阶梯顶（3）、戏声缥缈的水塘院子（4）、青蛇屋西面大房子旁（5）、舞狮馆后院（6）。",
+              img=G("座椅上拿到记忆之花【舞狮尊主(其一)】")),
+            gB("鬼差高手-斩骑", "鬼差高手：斩骑", "主线・【黄家宅邸前路口】旁的街道",
+               reward="武器【破军】",
+               gear=[("武器", "【亡命斩马刀】吸血流")],
+               tips=["难度不高，唯一要注意持枪突进：点按格挡即可无伤化解"]),
+            I("凶斧（完成）", ["tale"], "【八卦阁】一路打上四楼拿到【八卦阁楼顶钥匙】，出门见【八卦童子】交出斧老大的遗物。",
+              "得到铸魂材料【义结金兰之歃血刀】。", img=G("交出斧老大的遗物")),
+            I("碧血云天", ["acc"], "八卦阁前路口往西就是兰公子的家，拿到【兰家大宅大门钥匙】，碰一下铃铛刷新后回来开门。",
+              "完成【兰家大少】，成就【浪子侠心】。", img=G("得到饰品【碧血云天】")),
+            I("幻鬼酒馆的支线", ["tale", "purple"], "组织地下酒馆打碎罐子开密道，见到【二姐幻鬼】（修琵琶、铸魂），接紫色任务【机关船】。"
+              "浆洗房里的人全部对话：毕狄【道剑佛心】、紫衣狼头领【不灭侠胆】、牛掌柜（黄家大宅钥匙）、头牌花旦【头牌花旦】、渔夫【方块】。",
+              "【不灭侠胆】：每位大师的英灵跪下时要立刻处决，等太久会变身，失败多次任务失败（英文攻略资讯）。", img=G("见到NPC【二姐幻鬼】")),
+            I("深宅药罐 / 再会兄长", ["acc", "tale"], "用钥匙进黄家大宅，四片药罐残片（链、柄、腹、盖）集齐合成【深宅药罐】；二楼卧室记忆之花接到【再会兄长】。",
+              "喝药 15% 几率不消耗次数。阿袖的兄长阿瑾在梅谷湖靠陆家村的浅滩。", img=G("饰品【药罐残片·链】")),
+            I("舞扇（头牌花旦）", ["acc"], "头牌花旦的脂粉放进小巷香炉，拿到【天香阁钥匙】；天香阁三楼调查花旦真身拿到【残破的舞扇】，交回给她。",
+              "移动距离越长的攻击伤害越高，最多 +40%。", img=G("回幻鬼酒馆浆洗房，舞扇交给头牌花旦")),
+        ]),
+        ("庞镇：西部後街", "依游玩顺序", [
+            gB("堕落将军-武轩", "堕落将军：武轩", "主线・【後街牌坊】楼梯顶的圆形舞台",
+               reward="影之武装【贪狼】（转圈攻击并回血，吸血流核心）",
+               tips=["他一开始就有很厚的护盾值，很难主动打掉",
+                     "主要打法是格挡：每次格挡成功都会消耗不少护盾值",
+                     "护盾归零就处决并持续输出，一轮能打半管血，两轮结束"]),
+            I("妙手小张（庞镇）", ["tale"], "圆形舞台东面房子穿过去，【庞镇小张藏身处】。",
+              "庞镇四个宝藏（墨、二雕花边砚、虎型镇纸、玉笔架）找齐交给他，得到影之武装【黄金火铳】。", img=G("找到NPC【妙手小张(庞镇)】")),
+            I("凝血符", ["acc"], "窄巷走到头开宝箱。", "自身流血时间 -30%。", img=G("巷子走到头开宝箱得到饰品【凝血符】")),
+            I("水塘边的女正道弟子", ["key", "miss"], "【戏声缥缈的水塘】南面，帮她消灭敌人后她求你帮她解脱。",
+              "地上蓝圈里会出现记忆之花（暂时捡不到，后面再来）。", miss="先存档！一定要在她变异前立刻杀死她，否则记忆之花不会出现。",
+              img=G("有个女正道弟子在对抗敌人")),
+            gB("女妖骨婉约", "女妖骨婉约", "主线・【戏声缥缈的水塘】",
+               reward="铸魂材料【残存的执念·痴】；井底有【正道大营外门钥匙】",
+               gear=[("武器", "【亡命斩马刀】＋影之武装【贪狼】"), ("饰品", "【妙手千钧】、【筋力绑带】、【浑源经脉仪】")],
+               tips=["难度很低：她把头埋进手臂时会遮挡视野，立刻往后退",
+                     "她的吼叫会短暂控制你，连按提示键脱困",
+                     "敌人破防时立刻用贪狼转圈，伤害高又回血"]),
+            I("正道大营外门钥匙", ["key"], "跟着女妖跳进井底，爬梯子上来拿到。→ 第五章【正道大营】从此可以进入（陆家村【正道大营外门】）。", img=G("剧情道具【正道大营外门钥匙】")),
+            gB("神医-谢秋冬", "神医：谢秋冬", "主线・【三船殉难井底】出来",
+               reward="药瓶【不尽水】（次数用完后击杀敌人可回复）",
+               tips=["他能靠攻击你回血；但你攻击周围小怪时，他给小怪回血自己也会掉血",
+                     "先不管神医和被丝线绑住的小怪，专打能自由活动的小怪",
+                     "小怪清得差不多他就残血了，收尾即可（可用火流星引爆炸药桶清怪）"]),
+            I("青蛇屋", ["key"], "对话【谢小戎】解锁药瓶升级，得到药瓶【青蛇药剂】；调查蛇头接到主线【四大蛇屋】。",
+              "后面的铁匠铺炉火里拿【青铜精华】，给天玄青铜剑铸魂，到幻鬼酒馆交给毕狄完成【道剑佛心】。", img=G("对话NPC【谢小戎】")),
+            I("避雷符", ["acc"], "青蛇屋西面走下阶梯的大房子，开宝箱。", "雷电伤害 -30%、麻痹累积 -30%。打长鸿前装上。", img=G("开宝箱得到饰品【避雷符】")),
+            gB("水行帮主-游龙", "水行帮主：游龙", "主线・青蛇屋左后方街道走到头",
+               reward="影之武装【游龙头】（喷水，可灭火）",
+               note="一定要在打舞狮尊主前拿到游龙头。",
+               gear=[("武器", "【亡命斩马刀】＋【贪狼】")],
+               tips=["难度很低，吸血组合基本一次过", "敌人破防立刻用贪狼转圈输出回血"]),
+            I("相煎何急", ["tale"], "青蛇屋往北过桥走上阶梯，拾取记忆之花接到。", img=G("接到异闻任务【相煎何急(起点)】")),
+            gB("雷枪-长鸿", "雷枪：长鸿", "主线・【祠堂广场】下方",
+               reward="影之武装【雷霆枪】",
+               gear=[("饰品", "【避雷符】（二阶段换【斩骑符】）"), ("药瓶", "【青蛇药剂】：麻痹快满时喝，直接清除")],
+               tips=["庞镇数一数二难缠的头目，长枪冲击很快",
+                     "他举枪召唤雷霆之力时，被打会累积麻痹，立刻跑远等效果消失",
+                     f"旋转枪头突进的最后一下必定是 {R}，抓这个机会",
+                     "二阶段变骑兵：骑兵突刺点按格挡即可；马屁股对着你时立刻往后跳"]),
+            I("开光玉佩", ["acc", "tale"], "长鸿之后来到【玉儿家】，调查床上玉儿的父亲（选项随意），中途走开再回来继续对话。",
+              "完成【血肉花】，成就【杏林有继】。", img=G("对话完得到饰品【开光玉佩】")),
+            gB("被面具控制的舞狮尊主-烈焰", "舞狮尊主：烈焰", "主线・【舞狮馆深处】",
+               reward="剧情道具【熄火烈焰狮头】（到景炀轩找雷当修好 → 影之武装【烈焰狮头】，可以烧掉荆棘）",
+               gear=[("影之武装", "【游龙头】：喷水让他陷入潮湿，所有火焰招式失效"), ("饰品", "【辟火符】")],
+               tips=["三种主要攻击：挥动头部利刃、踏地、喷火",
+                     "不要一直喷水，让他保持潮湿状态即可",
+                     f"二阶段尊主单人操控，小心 {BK}，之后会立刻接突刺",
+                     f"他召唤木柱跳到高处时：{BL} 就准备反弹他吐的火球；{R} 他会直接砍下来",
+                     "清掉小怪后进入舞狮对决：在木柱上四向移动和他对喷火球，任一方杀气归零阶段结束"]),
+            gB("鬼差高手-勾魂", "鬼差高手：勾魂", "主线・【码头货栈】往下再上楼梯",
+               reward="武器【别离残钩】",
+               tips=["很平庸，斩马刀＋贪狼组合基本不会出问题",
+                     "他摆出反击架势时刀会发亮：这时攻击会被反打，而且他会回杀气，先停手"]),
+            W("先别开船！", "到湖边【庞镇船坞】后先不要开船，湖面区域（梅谷湖）以后再去。先把庞镇用烈焰狮头烧荆棘的地方探索完，并建议先去第五章正道大营。", info=True),
+            I("无相神镜", ["acc"], "【戏声缥缈的水塘】用烈焰狮头烧掉荆棘，【后山凉亭】旁宝箱。", img=G("开宝箱得到饰品【无相神镜】")),
+            I("慈母心", ["tale"], "后山凉亭往前拿【後街秘密地窖开关】，捡记忆之花接到；穿过後街秘密地窖完成。", "得到药瓶【慈花甘露】。", img=G("接到异闻任务【慈母心(起点)】")),
+            I("贫民窟的剑客", ["key", "miss"], "【贫民窟】铃铛往下遇到剑客，帮他消灭敌人。",
+              miss="先存档！要在他变异前立刻杀死他，否则记忆之花不会出现。", img=G("往前走激活铃铛【贫民窟】")),
+            I("归途（完成）", ["tale"], "高处往北激活【老根头家】，见到老根头的妻子，拿到【落灰的老旧木梳子】，回陆家村交给老根头。",
+              "成就【白首不相离】。", img=G("得到剧情道具【落灰的老旧木梳子】")),
+            B("灭法之法：雷婷（稻草人）", "可选・老根头家往北之后的稻草人", G("击败BOSS【灭法之法·雷婷】", 1)[0][0],
+              opt=True, true=True, reward="剧情道具【雷婷的霹雳面具】（四个面具之二）",
+              gear=[("饰品", "【避雷符】"), ("药瓶", "【青蛇药剂】：被麻痹时喝")],
+              tips=["雷系敌人，被打多了会麻痹，先拉开距离"]),
         ]),
     ]))
 
-# ---------------------------------------------------------------- 5
+# =====================================================================
+# 第五章 正道大营
+# =====================================================================
 CHAPTERS.append(dict(
-    id="ch5", num="第五章", title="天命營", en="Mandate Encampment",
-    cover=PG + "chief-disciple-550x309.jpg",
-    lead="可選區域（Pangzhen 拿到 Outer Gate Key 後即可進入），但真結局必要。兩大陷阱：不要殺掉屋頂上的 Red；"
-         "打 Yubi 之前先在花田檢查屍體。",
+    id="ch5", num="第五章", title="正道大营", sub="乱葬岗・校场",
+    cover=gb("七星剑阵-大师兄")[0],
+    lead="拿到【正道大营外门钥匙】后，从陆家村【正道大营外门】进入。最大的陷阱：屋顶上的【红衣女剑客】不要在第一次遇到时打死她，"
+         "要等她在大师兄战中再出现，两人一起打倒，才拿得到记忆之花与饰品【同心双鱼佩】。",
     sections=[
-        ("天命營 Mandate Encampment", "依遊玩順序", [
-            I("Guardian Idol Fragment: Head / Arm", ["key"], "Head：跳回之前的樓梯，巨大雕像頭旁；Arm：過橋後跳到右邊另一座橋上的小神龕。",
-              "四個碎片合成 Guardian Idol 飾品。", img=pp(ME, "key-item-1")),
-            I("Mandate Valley Gate Key", ["key"], "爬上巨大梯子後，弓手旁的地上。", img=pp(ME, "key-item-3")),
-            B("Corpse-Eating Xue", "可選 · 上鎖的門後", PG + "corpse-eater-550x309.jpg", opt=True,
-              reward="開啟支線 Xue, Admirer of Heroes",
-              tips=["先清小怪", "揮刃快攻全部格擋"]),
-            I("Xue, Admirer of Heroes", ["tale"], "擊敗 Corpse-Eating Xue 後接取，收集三件道具。",
-              "完成後回 Pangzhen 找 Child of Insight 換 Sha-Chi Headscarf。", img=pp(ME, 11)),
-            B("Wan Jun", "The Coppermaul · 可選", PG + "Untitled-Design-14-550x309.jpg", map=pp(ME, 21)[0], opt=True,
-              reward="Bashpole（Phantom Edge，可打破脆弱地板）",
-              tips=["他屁股著地後先閃，然後趁他躺著時攻擊（即使沒破防）",
-                    f"畫面充滿沙塵 = {R}，閃避", "沿地面推進的錘擊要閃"]),
-            I("Daughter of the Dark Sect", ["tale", "miss"], "Dovecote Bell 附近的女子。",
-              "屋頂上會遇到 Red, the Mysterious Swordswoman——<b>不要擊敗她，脫離戰鬥即可</b>。",
-              miss="殺了她 = 支線結束，且她不會參加 Seven-Stars 戰，掉落的記憶之花與 Twin Fish Pendant 永久錯過。",
-              img=pp(ME, 26)),
-            B("Red", "The Mysterious Swordswoman · 屋頂（不要殺）", PG + "Untitled-Design-15-1-550x309.jpg", opt=True,
-              reward="無——饒過她才有後續",
-              note="這一戰的正確做法是脫離戰鬥。之後她會在 Seven-Stars 戰中登場，並在最終戰前再度出現。",
-              tips=["空間很小，注意她的尖塔跳躍", f"絲線抓取後接 {R}"]),
-            B("Chief Disciple of the Seven-Stars", "可選（兩階段，含六名弟子）", PG + "chief-disciple-550x309.jpg", map=pp(ME, 31)[0], opt=True,
-              reward="Swordsman's Summon（Phantom Edge）、Training Grounds Key",
-              tips=["先殺六名弟子",
-                    f"二階段 Sword of Despair：衝刺後的 {BL} 彈反；三連揮的第三下是 {BL}",
-                    "天上飛來的投射物在接近時閃避"]),
-            I("Memory Flower & Twin Fish Pendant", ["acc", "miss"], "Chief Disciple 與 Red 戰鬥的場地。",
-              miss="只有之前沒殺 Red，她才會參戰並掉落。", img=pp(ME, 32)),
-            I("Guardian Idol Fragment: Torso", ["key"], "Road to the Training Grounds Bell 往下跳，沿路右轉進左邊建築。", img=pp(ME, "key-item-5")),
-            I("Nameless Thumb Ring", ["acc"], "同一棟建築樓上的寶箱。", img=pp(ME, 36)),
-            B("Wu Lengshuang", "The Soft Sword · 可選", None, map=pp(ME, 42)[0], opt=True,
-              reward="Soft Snake Sword（主武器）、Blackstone Fragment",
-              tips=["攻略站尚未公開詳細打法；按 紅光閃 / 藍光彈 的基本原則應對"]),
-            I("Guardian Idol", ["acc"], "Wu Lengshuang 戰場樹旁的 Leg 碎片，四片合成。", img=pp(ME, 44)),
-            I("Secrets of the Baishan Sect（花田屍體）", ["tale", "miss", "true"], "上樓梯後，在花田中檢查屍體。",
-              miss="一定要在擊敗 Training Grounds 盡頭的頭目（Yubi）之前檢查，且要在「Defeat Bi Taotao's puppet form」目標出現後才擊殺 Yubi，否則支線失敗、拿不到 Broken Vessel。",
-              img=(PP + "mandate-encampment-saishan-sect-objective-1-1.jpg", PP + "mandate-encampment-saishan-sect-objective-1-2.jpg")),
-            B("Yubi", "No. 21 Swordfighter Puppet · 區域頭目", PG + "no.21-boss-550x309.jpg", map=pp(ME, 50)[0], opt=True,
-              reward="Baishan Stormswords（主武器，後半段很強）、Broken Vessel（飾品）、Illusory Pipa 零件",
-              tips=[f"帶電旋轉之後接 {R}", "她跳到空中或屋頂後，落下時完美閃避"]),
-            I("Illusory Pipa Backplate", ["key", "true"], "Yubi 戰場內的建築。琵琶零件，真結局需要。", img=pp(ME, "key-item-6")),
-            W("回 Pangzhen 收尾", "擊敗 Chief Disciple 後回 Myst's Tavern 找 Purple-Robed \"Wolf\" Leader 拿 Shattered \"Heroes Courage\"；"
-              "Xue 的三件道具交給 Child of Insight 換 Sha-Chi Headscarf；Marketplace Bell 的 Don't Forget Me 支線。", info=True),
-            I("Sha-Chi Headscarf", ["acc"], "Pangzhen Pavilion of Knowledge Crossroads Bell 右邊建築頂樓的 Child of Insight（需 Xue 的三件道具）。", img=pp(PZ, 97)),
-            I("Don't Forget Me", ["tale"], "Pangzhen Marketplace Bell 後左邊建築，解除屏障後頂樓的女孩。", img=pp(PZ, 99)),
-            I("Auspicious Lion Fireball", ["acc"], "Pangzhen Sealed Lion Bell 上坡，解除屏障後樹旁。", img=pp(PZ, 101)),
+        ("正道大营", "依游玩顺序", [
+            I("力士神像（碎片）", ["acc"], "力士神像碎片・头：【夕阳小径】往左的开阔区域残破神像前；碎片・臂：【栈道入口】旁洞穴往左后方隧道。其他碎片沿路收集。",
+              "“破坏”类影之武装额外消耗 1 暗源，伤害 +75%。", img=A("力士神像")),
+            gB("吞噬尸体的小雪", "吞噬尸体的小雪", "可选・【乱葬岗】底部红圈",
+               opt=True, reward="开启异闻任务【崇拜大侠的小雪】",
+               note="先在【栈道眺望台】附近高台拿到【营地山谷大门钥匙】，开红门到【乱葬岗】。",
+               gear=[("武器", "【亡命斩马刀】"), ("药瓶", "【不尽水】：次数用完时击杀任何怪都能回复")],
+               tips=["不是单一怪物，而是乱葬岗一群怪的合称，血条打完前会不断刷怪",
+                     "只有击败头上有绿色火焰的怪，才会大量扣头目血条",
+                     "绿火会随机转移到另一只怪身上，一路追着打"]),
+            gB("巨锤客-万钧", "巨锤客：万钧", "可选・【箭塔之下】用巨凶斧劈开通道",
+               opt=True, reward="影之武装【长柄金瓜】（金瓜锤，可打破脆弱地面）",
+               gear=[("武器", "【亡命斩马刀】"), ("影之武装", "【贪狼】"), ("饰品", "【无名大师的扳指】、【浑源经脉仪】")],
+               tips=["拿锤冲刺时，面对他在快撞上时闪避；连冲 2～3 次后会瘫痪，趁机输出",
+                     "挥锤转圈时点按防御，可以顺便大幅削减他的杀气，转完也有一小段瘫痪",
+                     f"最高难度他会短暂遮挡视野，马上注意 {R} 和 {BL}"]),
+            I("崇拜大侠的小雪 → 杀气头巾", ["tale", "acc"], "收集三件信物：朴素的发钗（大营正门用金瓜锤开地面通道一路往前）、"
+              "漆黑的刀鞘（乱葬岗往高处走，断桥边丢火瓶的怪）、折断的铁剑（七星剑阵大师兄战场后方溪流尽头）。",
+              "带回庞镇八卦阁顶楼交给【八卦童子】，得到饰品【杀气头巾】（杀气回复 +15%）。", img=A("杀气头巾")),
+            I("无名大师的扳指", ["acc"], "击败巨锤客后进大营，到【通往校场的路】铃铛往下一路走。", "精纯杀气累积速度 +15%。", img=A("无名大师的扳指")),
+            I("魔教之女（红衣女剑客）", ["tale", "miss"], "进大营后走左侧上坡，对话坐在高塔前的女弟子接到；爬上塔顶会和【红衣女剑客】交战。",
+              "可以抓锁链跑掉，不用在这里打赢她。",
+              miss="单独在这里击败她，会少一朵记忆之花和一个饰品。她会在大师兄战中再出现，那时两人一起击败才不会漏。",
+              img=[(gb("红衣女剑客")[1], "位置"), (gb("红衣女剑客")[0], "實地")]),
+            gB("红衣女剑客", "红衣女剑客", "可选・高塔顶（建议先跑，留到大师兄战）",
+               opt=True, reward="（与大师兄一起击败后）记忆之花、饰品【同心双鱼佩】",
+               tips=["短时间没被打她会自动回杀气；她用轻功在塔顶屋檐间来回时打不到，结束后马上补一下",
+                     f"{BK} 有两种：先用丝线捆住你再冲上来；以及极快的直接挥剑",
+                     f"{R} 距离很远，不管多远都要立刻闪避；{BL} 主要在连招里，最好反应"]),
+            gB("软剑-乌冷霜", "软剑：乌冷霜", "可选・【幽禁之地】右边铁锁跳到平台",
+               opt=True, reward="武器【灵蛇软剑】",
+               gear=[("武器", "【亡命斩马刀】＋【贪狼】吸血")],
+               tips=["她会概率闪避你的攻击，用慢速武器容易被反打",
+                     "攻击前身上冒紫光：下一次攻击就算被你防住也会掉血",
+                     "破防时先打一套普攻，再切贪狼转圈，甚至能把血回满",
+                     "关键时刻用斩马刀的精纯杀气技能，有无敌帧可以躲关键攻击"]),
+            I("白山密闻（花田的尸体）", ["tale", "miss", "true"], "上楼梯后，在花田里调查尸体。",
+              "白山密闻要依序击败万钧、乌冷霜、七星剑阵大师兄、廿一号剑偶玉璧，最后在毕桃桃的尸体旁拿到奖励。",
+              miss="英文攻略指出：要先调查花田尸体、并在任务提示更新后才击败玉璧，否则任务失败、拿不到饰品【残破容器】。打玉璧前先确认任务进度。",
+              img=pp(ME, "saishan-sect-objective-1")),
+            gB("七星剑阵-大师兄", "七星剑阵：大师兄", "可选・【三高塔】往前的开阔区域",
+               opt=True, reward="双侠系列记忆之花；女剑客身上的记忆之花附带饰品【同心双鱼佩】",
+               gear=[("武器", "【亡命斩马刀】吸血流")],
+               tips=[f"一阶段开场固定是 {R}，全程盯着大师兄本体，红光一闪立刻闪避，否则直接秒杀",
+                     "你打小怪时他会用自己的血帮小怪回血，所以专打小怪逼他耗血",
+                     f"二阶段他在高塔用丝线操控尸体：横向晃动拼刀攻击慢、好格挡，最后一下必定是 {BL}",
+                     "他飘出画面时会用红色丝线远程攻击，朝一个方向一直跑即可",
+                     "半血时红衣女剑客出现：两人的蓝光会同时放，一次格挡就能挡；先耗大师兄的血，再收女剑客",
+                     "女剑客死后大师兄狂暴，用丝线组成长剑做中范围攻击"]),
+            I("同心双鱼佩", ["acc", "miss"], "大师兄战后，拾取红衣女剑客身上的记忆之花获得。", "自身杀气越少伤害越高，最多 +20%。",
+              miss="只有之前没在屋顶单独打倒她，她才会参战并掉落。", img=A("同心双鱼佩")),
+            gB("廿一号剑偶-玉璧", "廿一号剑偶：玉璧", "区域头目・【通往校场的路】开红门往下",
+               opt=True, reward="武器【白山风雷剑】（后半段很好用）、饰品【残破容器】、幻术琵琶的部件",
+               gear=[("武器", "【破军】＋【白蟒赤练】（她是人偶，吸血、出血无效）"),
+                     ("饰品", "【避雷符】、【浑源经脉仪】、【舞扇】")],
+               tips=["双剑连击为主，部分攻击带雷，被打太多会麻痹",
+                     "她把剑抵住另一把剑时准备闪避：划开后地面生成向外扩散的雷圈，之后必接重攻击和红光或蓝光，最容易死在这",
+                     "她召唤的龙卷风靠近格挡就能消除",
+                     f"半空 {R} 的闪避时机是她转圈冲下来的瞬间，而不是红光出现时",
+                     "每次后翻她都会刺出一道极快的剑气，常在连招结尾"]),
+            W("回庞镇收尾", "打完大师兄后回幻鬼酒馆找紫衣狼头领推进【不灭侠胆】；小雪的三件信物交给八卦童子。", info=True),
         ]),
     ]))
 
-# ---------------------------------------------------------------- 6
+# =====================================================================
+# 第六章 梅谷湖
+# =====================================================================
 CHAPTERS.append(dict(
-    id="ch6", num="第六章", title="梅姑湖", en="Meigu Lake（第一次造訪）",
+    id="ch6", num="第六章", title="梅谷湖", sub="湖面・第二座杀气塔",
     cover=PG + "zither-maiden-550x309.jpg",
-    lead="開船探索的湖區。Zhu Yuan 是真結局必打；War Wagon 取決於第三章 The Journey Home。"
-         "四個 Acolyte 面具收齊後才能進入第二次造訪的隱藏區域（見第七章頁面）。",
+    lead="半开放的湖区，坐船探索。建议顺序：修好幻术琵琶 → 枷笼山 → 红房子 → 雪山（风雪刀客）。"
+         "【火刀：祝原】与【湖心秘密】都和真结局有关。（中文攻略站本区图文仍在更新，地图截图暂用英文版画面。）",
     sections=[
-        ("梅姑湖 Meigu Lake", "依遊玩順序", [
-            I("Battleforged", ["acc"], "沿碼頭往左、上坡、左邊建築爬梯子的寶箱。", img=pp(ML, 1)),
-            B("Zhu Yuan", "The Searing Blade · 可選（真結局必要）", PG + "Untitled-Design-17-550x309.jpg", map=pp(ML, "key-item-1")[0],
-              opt=True, true=True, reward="Scorching Flames（Sanguine Reach 的 Soul Tempering 素材）",
-              note="用會爆炸的敵人炸開籠子，搭電梯到 Sha-Chi Tower 底部。必須在 The Last Chance 鐘之前擊敗。",
-              gear=[("飾品", "Flameward（火傷減半）")],
-              tips=["全身發橘光 = 往遠處閃，或用破防技打斷",
-                    "旋轉會在地面送出火焰，閃開",
-                    f"之後的跳擊是 {R}——等他真的落到你身上再閃"]),
-            B("Yan Qiansui", "The Zither Maiden · 可選", PG + "zither-maiden-550x309.jpg", map=pp(ML, 18)[0], opt=True, true=True,
-              reward="Illusory Pipa Strings（琵琶零件）、Fanatic's Fragment: Attachment",
-              note="Allure of Vanity：坐船在 Meigu Songhouse 周圍收集六朵 Yan'er 記憶之花後，在 Meigu Songhouse Dock 出現。",
-              tips=[f"{BL} 光球彈反、{R} 光球閃避、大白球直接躲開",
-                    "彩色光球消失後常常接紅光攻擊"]),
-            B("Grief-Stricken Jin", "主線 · Village of Lu Shallows Dock（群戰）", PG + "grief-stricken-jin-550x309.jpg",
-              reward="Embroidered Shoes（Scarlet Wraithblade 的 Soul Tempering 素材）",
-              tips=["先清較弱的敵人，最後才打 Jin"]),
-            I("Rouge Box", ["acc"], "擊敗 Grief-Stricken Jin 後的碼頭上。", img=pp(ML, 22)),
-            I("Deathlock", ["acc"], "燒掉右邊的樹枝，把 Preservation Jar 放到祭壇上。", img=pp(ML, 36)),
-            B("Acolyte Guhe", "可選 · Meigu Village East Dock 稻草人", None, map=pp(ML, 37)[0], opt=True, true=True,
-              reward="Guhe's Venom Mask（Acolyte 面具 3/4）", tips=["毒系敵人，帶 Venom Pouch 之類的毒抗飾品"]),
-            B("You Loong（狂暴）", "The Frenzied Blackwater Crew Leader · 可選", PG + "you-loong-2-550x309.jpg", map=pp(ML, 40)[0], opt=True,
-              reward="Loong Trident（Phantom Edge）、High-Power Pump（Deluge 的 Soul Tempering 素材）",
-              note="湖中島嶼 Blackwater Crew Dock。",
-              tips=[f"開場就是 {R}", "速度更快，其餘與 Pangzhen 第一戰相同"]),
-            I("Venom Pouch", ["acc"], "沿海岸往右、經過 Lake Banyan 挑戰點，敵人旁地上。", img=pp(ML, 47)),
-            B("Gold-Masked One #3", "可選 · Midlake Long Pillar Dock", None, map=pp(ML, 49)[0], opt=True, true=True,
-              reward="Flaming Grip / Quenched Flaming Grip ＋ Bloodline Awakening 3/5",
-              tips=["招式延續前兩戰：紅光閃、藍光彈、黑白畫面的招式只能閃"]),
-            I("Treasure Basin", ["acc"], "White Serpent House Dock Bell 右邊建築。", img=pp(ML, 52)),
-            B("Heartpiercer", "Elite Shadow Warden · 主線（White Serpent House）", PG + "heartpiercer-550x309.jpg", map=pp(ML, 57)[0],
-              reward="Sundering Dual Axes（主武器）、White Serpent Eye",
-              tips=["大部分攻擊可格擋，保守打、等連段收尾的閃光",
-                    f"最危險：削 Sha-Chi 的跳踢接 {BL} 旋轉——跳踢沒閃到就彈反旋轉",
-                    f"後空翻跳之後的 {R} 完美閃避；他硬直時待在攻擊範圍內"]),
-            B("One-Eyed Archer", "可選 · One-Eyed Isle Dock", PG + "one-eyed-archer-550x309.jpg", map=pp(ML, 61)[0], opt=True,
-              reward="One-Eyed Bow（Phantom Edge）",
-              tips=["持續射箭；他衝到中央會射紅色雷射", "雷射發射前跑到場地邊緣，打到邊緣的雷射用跳的躲"]),
-            I("Sharpshooter's Eye", ["acc"], "One-Eyed Archer 戰場上方樓梯的房子。", img=pp(ML, 62)),
-            I("War Wagon", ["edge", "miss"], "開船往西穿過冰湖裂縫，靠岸後往前走觸發 Old Man Gen 的過場。",
-              miss="必須已完成 The Journey Home（第三章開始），否則 Old Man Gen 不會出現；他腳邊的記憶之花與 Old Wooden Comb 也一併錯過。",
-              img=pp(ML, 63)),
-            I("Secrets at the Heart of the Lake", ["tale", "miss", "true"], "本區主要支線，在 Realm of Mirage 與 Inanis 對話取得 Violet Blossom。",
-              "需要四個 Acolyte 面具與兩顆 Crystal Puppet Eye（放到 Mirror Realm 的紅色雕像）。",
-              miss="進入 Mirage Estate 之前必須完成（獎盃 Forbidden Arts Beneath the Lake，真結局必要）。"),
-            W("前往 Mountain of Imprisonment", "完成 Illusory Pipa（琵琶零件：Head、Backplate、Strings）後，到湖最北邊 Weeping Mistgate Bell 的霧牆 → 第七章。"
-              "注意：進入 Mirage Estate 後，Mountain of Imprisonment 入口會被封鎖。", info=True),
+        ("梅谷湖（第一次造访）", "依游玩顺序", [
+            B("火刀：祝原", "隐藏头目・第二座杀气塔底部", PG + "Untitled-Design-17-550x309.jpg", map=pp(ML, "key-item-1")[0][0],
+              opt=True, true=True, reward="【长形黑伤】的铸魂材料（可升级成【炽刃】）",
+              note="用会爆炸的敌人炸开笼子，搭电梯到杀气塔底部。多家攻略把他列为真结局必打（也有影片指出结算不检查），保险起见打掉。",
+              gear=[("饰品", "【辟火符】")],
+              tips=["全身发橘光 = 往远处闪，或用破防招打断", "旋转会在地面放出火焰，闪开", f"之后的跳击是 {R}，等他真的落到你身上再闪"]),
+            B("琴女烟千岁", "可选・湖中小岛的倒塌戏楼", PG + "zither-maiden-550x309.jpg", map=pp(ML, 18)[0][0], opt=True, true=True,
+              reward="【幻术琵琶的琴弦】（琵琶最后一个部件）、铸魂材料【残存的执念·执】",
+              note="异闻任务【浮华引】：收集湖面上全部六朵记忆之花后，再到戏楼才会出现。",
+              tips=[f"{BL} 光球格挡反弹、{R} 光球闪避、大白球直接躲开", "彩色光球消失后常会接红光攻击"]),
+            B("悲痛欲绝的阿瑾", "主线・陆家村浅滩船坞（群战）", PG + "grief-stricken-jin-550x309.jpg",
+              reward="【红妆鬼斩】的铸魂材料；完成【再会兄长】",
+              tips=["先清掉较弱的敌人，最后再打阿瑾"]),
+            B("灭法之法：蛊鹤", "可选・梅谷村东岛的稻草人", None, map=pp(ML, 37)[0][0], opt=True, true=True,
+              reward="四个灭法之法面具之一（毒）",
+              tips=["毒系敌人，带防毒饰品（如【食物防腐罐】）"]),
+            B("发狂的水行帮主：游龙", "可选・水行帮船坞（湖中岛）", PG + "you-loong-2-550x309.jpg", map=pp(ML, 40)[0][0], opt=True,
+              reward="新的影之武装、【游龙头】的铸魂材料",
+              tips=[f"开场就是 {R}", "速度更快，其余和庞镇那一战相同"]),
+            B("湖中龙柱（甄子丹）", "可选・湖中龙柱船坞", None, map=pp(ML, 49)[0][0], opt=True, true=True,
+              reward="血脉觉醒 3/5",
+              tips=["招式延续前两根龙柱：红光闪、蓝光格挡", "画面变黑白的招只能闪，格挡会被吃光杀气"]),
+            B("鬼差高手：断肠", "主线・白蛇屋", PG + "heartpiercer-550x309.jpg", map=pp(ML, 57)[0][0],
+              reward="武器【天煞双钺】、白蛇屋的蛇眼（四大蛇屋）",
+              tips=["大部分攻击可格挡，保守打，等连招收尾的闪光",
+                    f"最危险：削杀气的跳踢接 {BL} 旋转——跳踢没闪到就格挡旋转",
+                    f"后空翻跳之后的 {R} 完美闪避"]),
+            B("独眼弓客", "可选・独眼之岛船坞", PG + "one-eyed-archer-550x309.jpg", map=pp(ML, 61)[0][0], opt=True,
+              reward="影之武装【独眼弓】",
+              tips=["一直放箭；冲到中央后会射红色光束", "光束发射前跑到场地边缘，扫到边缘的光束用跳的躲"]),
+            I("老根头（冰湖）", ["key", "miss"], "开船往西穿过冰湖裂缝，靠岸往前走触发老根头的剧情，获得新的影之武装；他脚边还有记忆之花。",
+              miss="必须已完成【归途】（陆家村→庞镇），否则老根头不会出现。", img=pp(ML, 63)),
+            I("湖心秘密", ["purple", "true", "miss"], "集齐四个灭法之法面具（炎茹、雷婷、蛊鹤、寒髓）进入【护法四像镜】后的幻术师遗迹，摧毁湖心“仪式”。",
+              "途中和【虚空】的对话不能跳过，它是真结局的必要条件。",
+              miss="必须在进入戏梦山庄前完成。"),
+            W("前往枷笼山", "集齐幻术琵琶的琴头（荡秽）、琴背（玉璧战场）、琴弦（烟千岁），交给庞镇的【二姐幻鬼】修好，"
+              "到湖北边的【泣声传来的雾门】弹奏琵琶，就能进入枷笼山。", info=True),
         ]),
     ]))
 
-# ---------------------------------------------------------------- 7
+# =====================================================================
+# 第七章 枷笼山・红房子・梅谷湖再访
+# =====================================================================
 CHAPTERS.append(dict(
-    id="ch7", num="第七章", title="囚山", en="Mountain of Imprisonment ＋ 回訪",
+    id="ch7", num="第七章", title="枷笼山", sub="红房子・梅谷湖再访",
     cover=PG + "huangxing-550x309.jpg",
-    lead="可選但真結局必要的山區，之後依序回 Crimson Manor 拿最後一個面具與 Crystal Puppet Eye，再回 Meigu Lake 進入隱藏區域。"
-         "本章兩個對話選項會讓支線永久消失。",
+    lead="湖上的隐藏区域，影响结局的关键节点。打完章节头目救出【弦者】、见到【虚空】后，第三扇幻术门会给你【哑巴人偶的舌头】和【水晶眼珠“阴”】，"
+         "然后就能进入第一章的红房子。本章有两个对话选项选错会让支线永久消失。（地图截图暂用英文版画面。）",
     sections=[
-        ("囚山 Mountain of Imprisonment", "依遊玩順序", [
-            I("Baishan Writ", ["acc"], "The Lady's Path Bell 之後路上受傷 NPC 的屍體。", img=pp(MI, 2)),
-            I("Talisman of Despair", ["acc"], "完成 Cui 目標後，燒掉樹枝下山，籠中男子給你。", img=pp(MI, 8)),
-            I("The Broad Saber", ["tale"], "打開附近牢房，與 Wulin Fighter 交談。", img=pp(MI, 11)),
-            I("Hero's Lament", ["tale", "miss"], "上坡用鎖鏈放下籠子，與 Liu Yi 交談。",
-              "過程中要給他看 Moji's Bloodstained Sword，完成後得到 Ink Cut（Phantom Edge）。",
-              miss="Liu Yi 死亡則支線與 Ink Cut 一起失敗——保護他。", img=pp(MI, 12)),
-            B("Iron Butcher", "The Frenzied Brute · 可選", PG + "iron-butcher-550x309.jpg", opt=True,
-              reward="Iron Butcher Mask（Jagged Steel 的 Soul Tempering 素材）",
-              note="The Lady's Path Bell 附近。",
-              tips=["三個紫色毒罐要閃開", "單獨丟出的毒罐會立刻爆炸，同樣要閃"]),
-            B("Bi Feng", "Giant Saber Commander · 可選（真結局必要）", PG + "bi-feng-550x309.jpg", map=pp(MI, 14)[0], opt=True, true=True,
-              reward="Juggernaut（主武器）",
-              note="Cavern Passage Bell 附近。必須在 The Last Chance 鐘之前擊敗。",
-              tips=[f"灰色揮砍之後接 {R}，完美閃避", "刀氣投射物彈反", f"原地垂直起跳是 {R}"]),
-            I("Rootless Dew", ["key"], "Bi Feng 戰場左邊樓梯上的岩石。", "之後救出 Lu Sanqian 時要給他（見 Crude Radiant Heart）。", img=pp(MI, "key-item-2")),
-            I("Ledger of Atonement", ["tale"], "持續與 Agonized Ironmask 對話，直到他請你找帳本。", img=pp(MI, 18)),
-            B("Kui Yanyan", "The Deranged · 可選", PG + "kui-yanyan-550x309.jpg", map=pp(MI, 21)[0], opt=True,
-              reward="Missing Lift Crank（啟動升降梯）、Sha-Chi Amber",
-              tips=["貼身打來打斷他的攻擊", "丟出的匕首彈反"]),
-            I("Ink Cut", ["edge"], "取得 Moji's Bloodstained Sword 後，在 Cavern Passage Bell 附近跟 Liu Yi 談 Moji's Relic。",
-              "Game8 提示：之後打 Huangxing 時裝備 Ink Cut 可觸發額外對話。", img=pp(MI, 24)),
-            I("Ironmask 對話選項", ["key", "miss"], "Commander's Platform 路上與 Ironmask 交談。",
-              "必須選「This won't absolve you of your sins」開戰。",
-              miss="選錯會失去下一條支線 Bai Xue，以及 Pangzhen 的一整組收集品（Ultimate Talisman、Snow and Blood 等）。",
-              img=pp(MI, 25)),
-            I("Bai Xue", ["tale", "miss"], "擊敗 Ironmask Assassin 後，與他身後的人偶交談。",
-              miss="選「Leave him alone」人偶會消失，支線永久錯過。", img=pp(MI, 26)),
-            I("Crude Radiant Heart", ["acc", "miss"], "前一個道具之後上樓梯，Lu Sanqian 躺在地上（需完成他的所有目標）。",
-              miss="救出他時要給 Rootless Dew；拒絕的話他到不了 The Lady's Shrine，本周目錯過。", img=pp(MI, 30)),
-            B("Jade-Face", "可選 · The Lady's Shrine Bell 附近", None, map=pp(MI, 32)[0], opt=True,
-              reward="Seamless Death（主武器）",
-              tips=["攻略站尚未公開詳細打法；按 紅光閃 / 藍光彈 的基本原則應對"]),
-            I("Desperate Stand", ["acc"], "與 Jade-Face 記憶之花同一個房間（右邊房間）。", img=pp(MI, 34)),
-            B("Huangxing", "The Kunlun Renegade · 可選（兩階段）", PG + "huangxing-550x309.jpg", map=pp(MI, 35)[0], opt=True,
-              reward="Flying Guillotine（Phantom Edge，可打開封鎖區域）",
-              gear=[("Phantom Edge", "Ink Cut（觸發額外對話）")],
-              tips=[f"一階段：越轉越快的鏈錘旋轉最後是 {R}；場地小，利用柱子",
-                    "二階段 Whirling Executioner：他衝到你面前前一刻翻滾閃避",
-                    f"兩道風斬＋一道劍斬後是 {BL}，接著常常再來一個 {R}"]),
-            I("Inanis' Radiant Fan", ["edge"], "在 Huangxing 戰場用 Flying Guillotine 打開隱藏通道往下跳，過場後取得。", img=pp(MI, 36)),
-            I("Crystal Puppet Eye [Yin] / Puppet's Tongue", ["key", "true"], "進入前方橘色傳送門（攻略假設為第三個進入的門），與中央的人偶互動。",
-              "Puppet's Tongue 用來進入 Crimson Manor；兩顆 Crystal Puppet Eye 是真結局條件。", img=pp(MI, "key-item-5")),
-            W("Whence the Weeping", "過橋之前，先完成「到達山頂神社找出哭聲來源」與「進入神社地底」兩個步驟，否則這兩步會被鎖住。"),
+        ("枷笼山", "依游玩顺序", [
+            I("横刀", ["tale"], "打开附近牢房，和江湖豪杰对话。击杀横刀队长（毕峰）后回来告知他。", img=pp(MI, 11)),
+            I("英雄悲歌（柳义）", ["tale", "miss"], "上坡用锁链放下笼子，和【柳义】对话。",
+              "找到墨玑子的遗物 → 把墨玑子的染血剑带给柳义 → 拔出墨玑子的剑，获得影之武装【墨血无痕】（攻略评价非常强）。",
+              miss="柳义死亡任务就失败，墨血无痕一起错过。", img=pp(MI, 12)),
+            B("癫狂暴徒：铁杀", "可选・铁杀营地", PG + "iron-butcher-550x309.jpg", opt=True,
+              reward="【残钢刃】的铸魂材料",
+              tips=["三个紫色毒罐要闪开", "单独丢出的毒罐会马上爆炸，也要闪"]),
+            B("横刀：毕峰", "可选・【横刀平台】", PG + "bi-feng-550x309.jpg", map=pp(MI, 14)[0][0], opt=True, true=True,
+              reward="新的主武器（大刀）",
+              note="多家攻略列为真结局必打，保险起见在【最后的挽回之地】前打掉。",
+              tips=[f"灰色挥砍之后接 {R}，完美闪避", "刀气飞行道具可以格挡", f"原地垂直起跳是 {R}"]),
+            I("赎罪名单（怪面）", ["tale", "miss"], "持续和怪面对话，直到他请你找名单；之后在横刀平台路上再和他对话。",
+              "最后的对话要选择和他开战（不要选放过他）。奖励：杀气琥珀碎片、沾血的项链、庞镇後街小院钥匙。",
+              miss="选错会失去后续的【白雪儿】支线，以及庞镇後街小院的一整组收集。", img=pp(MI, 25)),
+            I("白雪儿", ["tale", "miss"], "打倒怪面后，和陈柱身边的女性人偶对话。", miss="如果选择不管他、直接离开，人偶会消失，支线永久错过。", img=pp(MI, 26)),
+            B("疯婆子奎艳艳", "主线・宗祠外山门", PG + "kui-yanyan-550x309.jpg", map=pp(MI, 21)[0][0],
+              reward="升降梯的摇柄、杀气琥珀",
+              tips=["贴身打，打断她的攻击", "她丢出的匕首可以格挡"]),
+            I("小翠（陆三迁）", ["tale"], "打开上山的门，救出牢笼中的【陆三迁】（小翠的爷爷）。", "之后任务提示找小翠的父母：他们在最终章断魂山，现在不用找。", img=pp(MI, 30)),
+            B("玉面郎君", "可选・圣母娘娘宗祠附近", None, map=pp(MI, 32)[0][0], opt=True,
+              reward="武器【玉双环】（昆仑三杰）",
+              tips=["中文攻略尚未提供详细打法，按红光闪、蓝光格挡、黑光不要挡的原则应对"]),
+            B("昆仑叛教者：荒行子", "可选（两阶段）・圣母娘娘宗祠", PG + "huangxing-550x309.jpg", map=pp(MI, 35)[0][0], opt=True,
+              reward="影之武装【血滴子】（能打开大部分封锁区域）",
+              gear=[("影之武装", "【墨血无痕】（装备它会触发额外对话）")],
+              tips=[f"一阶段：越转越快的链锤，最后是 {R}；场地小，善用柱子",
+                    "二阶段：他冲到你面前前一刻翻滚闪避",
+                    f"两道风斩＋一道剑斩之后是 {BL}，接着常常再来一个 {R}"]),
+            I("哑巴人偶的舌头・水晶眼珠“阴”", ["key", "true"], "击败章节头目、救出弦者并和虚空对话后，打开第三扇幻术门获得。", "有了舌头就能进入第一章的红房子。", img=pp(MI, "key-item-5")),
+            W("泣声何来", "过桥之前，先完成「登上顶峰的宗祠寻找哭声来源」与「进入宗祠的地下」两步，否则会被锁住。"),
         ]),
-        ("回訪：Crimson Manor", "從泣溪谷的 Long Pillar Overlook 進入（需要 Puppet's Tongue）", [
-            I("Ancient Armor Fragment", ["acc"], "Crimson Manor Bell 左邊。", img=pp(WCV, 54)),
-            B("The Puppet Scavenger & Acolyte Hansui", "可選 · Scavenger Pens（雙頭目）", PG + "puppet-scavenger-550x309.jpg", map=pp(WCV, 60)[0],
-              opt=True, true=True, reward="Hansui's Frost Mask（面具 4/4）、Crystal Puppet Eye [Yang]、Alloyed Scythe Blade",
-              tips=["Scavenger 很慢很好打，優先集中火力打會冰凍你的 Acolyte",
-                    "避開地上的冰圈，以及會冰凍爆炸的分身",
-                    "建議下降時踩在絲線上避免摔落傷害"]),
+        ("回访：红房子", "悲泣溪谷杀气塔底（需要哑巴人偶的舌头）", [
+            B("红房子头目（与灭法之法：寒髓）", "可选・红房子内双头目", PG + "puppet-scavenger-550x309.jpg", opt=True, true=True,
+              reward="最后一个面具【冰面具】、【水晶眼珠“阳”】",
+              note="两样都是完美结局的关键道具。",
+              tips=["大块头的人偶很慢很好打，优先集中打会冰冻你的寒髓", "避开地上的冰圈，以及会冰冻爆炸的分身"]),
         ]),
-        ("回訪：Meigu Lake 第二次造訪", "需要四個 Acolyte 面具", [
-            I("Phantom Illusionist Ruins Long Pillar", ["pillar", "true"], "從第三個 Ruins Bell 打破路障，左邊區域。Gold-Masked One #4，另有 Chaos Iron Fragment I。",
-              img=pp(ML, 74)),
-            I("Acolyte Whisk", ["acc"], "#78 記憶之花旁。", img=pp(ML, 79)),
-            I("Acolyte Icicle", ["acc"], "第五個 Phantom Illusionist Ruins Bell 旁。", img=pp(ML, 82)),
-            B("Blizzard Blademaster", "可選 · Whiteshadow's Fall", PG + "Blizzard-blademaster-550x309.jpg", map=pp(ML, 96)[0], opt=True,
-              reward="Whiteshadow（主武器）",
-              gear=[("飾品", "元素傷害減免飾品（冰抗）")],
-              tips=["第一擊在最後一刻閃避——它會折返", f"他衝刺後的第二擊是 {R}，完美閃避"]),
-            W("Pangzhen 回收", "若 Ironmask 選對了選項，回 Pangzhen Green Serpent House Bell 對面上鎖的門：兩朵記憶之花、Ultimate Talisman、Snow and Blood（飾品）。", info=True),
-            I("Snow and Blood", ["acc", "miss"], "Pangzhen：Green Serpent House Bell 過橋上樓梯、左邊上鎖的門，沿屋頂到床上的屍體 → 田野 → 樹下岩石。",
-              miss="Ledger of Atonement 結尾若選了「Leave him alone」則整組錯過。", img=pp(PZ, 106)),
+        ("回访：梅谷湖", "集齐四个面具后", [
+            I("护法四像镜・幻术师遗迹", ["purple", "true"], "雪山区域深处的镜子，要集齐四个稻草人面具才能进入。遗迹里有第四根龙柱（甄子丹）。", img=pp(ML, 74)),
+            B("风雪刀客", "可选・白影陨落之处", PG + "Blizzard-blademaster-550x309.jpg", map=pp(ML, 96)[0][0], opt=True,
+              reward="武器【白影】",
+              gear=[("饰品", "冰属性减伤的饰品")],
+              tips=["第一击在最后一刻闪避——它会折返", f"他冲刺后的第二击是 {R}，完美闪避"]),
+            W("回庞镇後街小院", "如果【赎罪名单】选对了，用【庞镇後街小院钥匙】回庞镇（青蛇屋附近）拿两朵记忆之花与两个饰品。", info=True),
         ]),
     ]))
 
-# ---------------------------------------------------------------- 8
+# =====================================================================
+# 第八章 戏梦山庄
+# =====================================================================
 CHAPTERS.append(dict(
-    id="ch8", num="後期區域", title="蜃樓莊園", en="Mirage Estate ＋ 赤林收尾",
+    id="ch8", num="第八章", title="戏梦山庄", sub="最后的探索区域・血色森林冰封区",
     cover=KG + "Fighting-Lei-Dang.jpg",
-    lead="從 Green Serpent House 的門進入。<b>踏進 Mirage Estate 就是不歸點</b>：Meigu Lake 與 Pangzhen 的紫色支線、Mountain of Imprisonment 入口都會鎖住。"
-         "（此區的地圖截圖攻略站尚未公開，先以戰鬥截圖代替。）",
+    lead="收集完蛇眼、蛇牙、蛇信后，从庞镇青蛇屋后方的门进入。<b>踏进戏梦山庄就是真结局的第一个截止点</b>："
+         "还没完成的真结局任务会锁死（走到庞镇後街的桥时虚空会警告你，可以回头）。",
     sections=[
-        ("進入前", "最後檢查", [
-            W("Mirage Estate 不歸點", "<ul><li>Secrets at the Heart of the Lake 已完成</li><li>Pangzhen / Meigu Lake 所有紫色支線（真結局必要）</li>"
-              "<li>Mountain of Imprisonment 已完成（Bi Feng、Crystal Puppet Eye）</li><li>Zhu Yuan 已擊敗</li>"
-              "<li>走到紅線樓梯時 Inanis 會警告你——還沒完成就回頭</li></ul>"),
+        ("进入之前", "最后检查", [
+            W("戏梦山庄：不归点", "<ul><li>【湖心秘密】已完成（含和虚空的对话）</li><li>四个灭法之法面具：炎茹（火）、雷婷（雷）、蛊鹤（毒）、寒髓（冰）</li>"
+              "<li>两个水晶眼珠：阴、阳</li><li>故事菜单里所有紫色图标的任务</li><li>火刀：祝原、横刀：毕峰 已击败（保险起见）</li></ul>"
+              "<p>进入后只剩【血脉觉醒】（五根龙柱）可以继续完成。</p>"),
         ]),
-        ("蜃樓莊園 Mirage Estate", "依遊玩順序", [
-            I("Feather Fan Plume", ["acc"], "Nuo Mask Altar：爬梯後、下一個 Bell 前建築前方的桌上。"),
-            I("Quick Hand's Request（Mirage Estate）", ["tale", "true"], "Zhang's Hideout Bell 後方洞穴，與 Zhang 交談拿清單。"),
-            I("Zhang 的玉箱（Opera House）", ["key", "miss", "true"], "Opera House 內的玉箱，Quick Hand's Request 需要。",
-              miss="第一次經過時就要拿——歌劇結束後門會鎖上。"),
-            I("Executioner's Headscarf", ["acc"], "Opera House 爬梯子、經過人偶敵人後的寶箱。"),
-            B("Yuding", "No. 12 Crescent Blade Puppet · 主線", None,
-              reward="Crescent Blade（主武器）", note="Training Grounds Bell 附近。",
-              tips=["攻略站尚未公開詳細打法；按 紅光閃 / 藍光彈 的基本原則應對"]),
-            I("Opera Ticket", ["key"], "Training Grounds 北側祭壇。"),
-            B("Qiu Feng", "The Crimson Boneblade · 主線", KG + "Qiu-Feng-Boss.jpg",
-              reward="Wraith Mask（飾品）", note="Mourning Hall Bell 附近的建築。",
-              tips=["雙臂舉起 → 閃避接下來兩擊", f"最後的砸地是 {R}，完美閃避",
-                    f"紅色飛刃彈反，最後一把是 {BL}"]),
-            I("Nuo Mask", ["acc"], "收集 Sorrow（Back Hill）、Wrath（Opera House 東側祭壇）、Joy（Willow Pavilion）三個碎片，交給 Nuo Mask Altar 的 Old Beggar。"),
-            I("Thundermoon Lantern", ["acc", "true"], "把 Mirage Estate 的寶物交給 Zhang's Hideout 的 Zhang。完成 Quick Hand Zhang 線。"),
-            B("Lei Dang", "The Order's Envoy · 主線（兩階段）", KG + "Fighting-Lei-Dang.jpg",
-              reward="Tiger Cannon（Phantom Edge，可轟開脆弱牆壁）", note="Perfect Vessel Pond Bell 附近。PCGamesN 評為最難頭目之一。",
-              tips=["他跳起後會發出全場衝擊波——躲到石頭後面",
-                    "攻擊來自各個方向，保持移動、不要貪刀"]),
-            B("Mo Yuan", "Leader of the Bastion of Mo · 可選（Mirage Estate 長柱）", PG + "mo-yuan-550x309.jpg", opt=True, true=True,
-              reward="Bastion of Mo Mask（Soul Tempering）＋ 完成 Bloodline Awakening 5/5",
-              tips=[f"蓄力跳擊是 {R}，幾乎一擊必殺，一定要完美閃避", "他會從天上召喚光柱，持續移動閃避"]),
+        ("戏梦山庄", "依游玩顺序", [
+            B("玉鼎", "主线・练武场", None,
+              reward="武器【青龙偃月刀】",
+              tips=["中文攻略尚未提供详细打法，按红光闪、蓝光格挡、黑光不要挡的原则应对"]),
+            B("红衣骨刃头目", "主线・灵堂附近（中文名称待确认）", KG + "Qiu-Feng-Boss.jpg",
+              reward="饰品（面具类）",
+              tips=["双臂举起 → 闪避接下来的两击", f"最后的砸地是 {R}，完美闪避", f"红色飞刃格挡，最后一把是 {BL}"]),
+            I("妙手小张（戏梦山庄）", ["tale", "true"], "在戏梦山庄会最后一次遇到妙手小张，找齐他要的宝藏，他的整条支线就完成了。",
+              miss="英文攻略提醒：歌剧院里给小张的玉箱要第一次经过就拿，看完戏门会锁上。"),
+            B("“虎炮”：雷当", "主线（两阶段）", KG + "Fighting-Lei-Dang.jpg",
+              reward="影之武装【虎神炮】（可以轰开脆弱的墙）",
+              tips=["他跳起后会发出全场冲击波——躲到石头后面", "攻击来自四面八方，保持移动、不要贪刀"]),
+            B("暗魔天堡堡主：魔渊", "可选・戏梦山庄龙柱（第五根）", PG + "mo-yuan-550x309.jpg", opt=True, true=True,
+              reward="【暗魔天堡面具】（黑伤的铸魂材料，升级成【黑魔伤】）＋ 完成【血脉觉醒】",
+              tips=[f"蓄力跳击是 {R}，几乎一击必杀，一定要完美闪避", "他会从天上召唤光柱，持续移动"]),
         ]),
-        ("赤林收尾 Crimson Forest Cleanup", "現在可以處理的舊區域內容", [
-            I("Frostward", ["acc"], "Burial Grounds Bell 往西南，穿過結冰水面到第一個區域。冰屬性減傷。"),
-            I("Chaos Ring", ["acc"], "Mirrorwood Depths Bell 的傳送門謎題區第二段，舊東側傳送門前。"),
-            B("Yucong", "No. 34 Twisted Puppet · 可選（Threadbound Great Tree）", None, opt=True,
-              reward="Freezing Chaos（主武器）；第三階段：Chaos Iron Fragment II",
-              note="就是第一章 Triple Threat 支線的目標。",
-              gear=[("武器", "Game8：戰前裝備 Blazing Edge，否則戰鬥只到第二階段，錯過額外過場與 Chaos Iron Fragment II（Shadowless Edge 需要）")],
-              tips=["攻略站尚未公開詳細打法；按 紅光閃 / 藍光彈 的基本原則應對"]),
-            I("A Severed Mindseal（赤林塔）", ["tale"], "Crimson Forest Sha-Chi Tower 6F 的 Bell 旁。到塔底盪到熔爐取得 Primal Stone 與塔鑰匙，交給 Spectral Blade。"),
-            I("Use It Against Them / Heart of the Fist", ["tale"], "同在 6F：Jade Dancer 邀你只用 Fiend Saws ＋ Iron Gauntlets 切磋；Iron Fiend 的支線在 Burial Grounds Bell 西南的大墓碑完成。",
-              "需要第三章頭目第三階段掉落的 Fiend Saws。"),
+        ("血色森林（冰封区）", "进入戏梦山庄触发剧情后开放", [
+            I("第三座杀气塔", ["key"], "血色森林之前去不了的区域变成冰天雪地，里面有第三座杀气塔。"),
+            B("三张脸的诡异魔偶（第二次）", "可选・冰封区", KG + "Aberrant-Three-Faced-Puppet.jpg", opt=True,
+              reward="【黑伤双刃】的另一半铸魂材料",
+              gear=[("武器", "一定要用【炽刃】击败她，才拿得到材料")],
+              tips=["钻镜子消失时先准备闪避", f"冲出来的攻击是 {R}"]),
+            B("玉琮", "可选・丝线缠绕的巨树", None, opt=True,
+              reward="新的主武器",
+              note="英文攻略：战前装备特定武器才会有第三阶段（多拿一个材料），中文攻略尚未确认。",
+              tips=["中文攻略尚未提供详细打法"]),
         ]),
     ]))
 
-# ---------------------------------------------------------------- 9
+# =====================================================================
+# 第九章 断魂山
+# =====================================================================
 CHAPTERS.append(dict(
-    id="ch9", num="最終章", title="裂魂山", en="Mount Soulrend",
+    id="ch9", num="最终章", title="断魂山", sub="最终头目",
     cover=KG + "Soulrend-Cliff-Bell.jpg",
-    lead="最終區域。頭目名稱與截圖預設模糊處理，點擊才會顯示。"
-         "<b>The Last Chance 鐘之後無法離開</b>，手動存檔並確認真結局條件。",
+    lead="最终区域。最后的头目名称与截图预设模糊，点击才显示。<b>【最后的挽回之地】铃铛之后就无法离开</b>，直到打完结局。",
     sections=[
-        ("真結局條件", "在 The Last Chance 之前全部完成", [
-            W("真結局 checklist（With Heart and Blood）", "<ul>"
-              "<li>兩顆 Crystal Puppet Eye（Crimson Manor、Mountain of Imprisonment）放到 Meigu Lake Mirror Realm</li>"
-              "<li>四個 Acolyte 面具</li><li>修好 Illusory Pipa（Head / Backplate / Strings）</li>"
-              "<li>五根長柱 Bloodline Awakening</li><li>Secrets at the Heart of the Lake</li>"
-              "<li>Quick Hand Zhang 整條線</li><li>Zhu Yuan、Bi Feng 已擊敗</li><li>所有紫色支線</li></ul>"
-              "<p>多數攻略建議：在 The Last Chance 鐘前手動存檔。</p>", info=True),
+        ("真结局条件", "游民星空整理", [
+            W("真结局（昭昭心与血）", "<ul><li>故事菜单中所有紫色图标任务，在进入戏梦山庄前完成</li>"
+              "<li>【湖心秘密】（含和虚空的对话，不能跳过）</li><li>【血脉觉醒】：五根龙柱挑战全部完成</li></ul>"
+              "<p>条件全部达成后，击败梦华会继续迎战真正的最终头目，触发真结局并解锁奖杯【昭昭心与血】。</p>", info=True),
         ]),
-        ("裂魂山 Mount Soulrend", "依遊玩順序", [
-            I("Cui（完成）", ["tale"], "Last Mandate Encampment：Bell 西邊圍欄區，坐在箱子上的男女。",
-              miss="必須在 The Crusher and the Saw 之前完成，否則拿不到 Baishan Headband。"),
-            B("The Crusher and the Saw", "Giant's Lair（兩階段）", PG + "crusher-boss-550x309.jpg",
-              reward="Bonesaw（主武器）；完成 Cui：Baishan Headband",
-              tips=["一階段先鎖定 Saw 打", f"二階段 Crusher：錘擊後接空中 {R}，完美閃避"]),
-            B("連戰：舊敵再臨", "多名先前頭目同場", PG + "puppet-scavenger-2-550x309.jpg",
-              note="完成過的角色支線越多，這裡就會有越多同伴幫忙。",
-              tips=["每個敵人的打法同其原本頭目戰"]),
-            W("The Last Chance 不歸點", "過了這個鐘就被鎖在最終頭目連戰中，直到通關。請先手動存檔。"),
-            B("Leng Tu", "Herald of the Veil", KG + "Fighting-Leng-Tu.jpg", spoil=True,
-              reward="無",
-              note="AllThingsHow：開始這一戰後結局路線就鎖定。",
-              tips=["先清召喚物", "注意天上手臂的陰影落點", "光球蓄力會把你推開，不需要閃"]),
-            B("Meng Hua", "The Merciful Lady of the Blossom Veil", PG + "lady-boss-fight-550x309.jpg", spoil=True,
-              reward="The Lady's Fan（主武器）、The Lady's Crown、Herald's Lingering Threads",
-              tips=["旋轉雷射用跳或閃躲過", f"蓄白色光球且畫面變暗後接 {R}"]),
-            B("真結局頭目", "The Fallen Dream（Soulrend Cliff 頂端的金色傳送門）", KG + "Zuo-Shang-Boss.jpg", spoil=True, true=True,
-              reward="Aureate（主武器）、Radiant Heart、Broken Long Body",
-              note="只有達成所有真結局條件才會出現。攻略站為避免劇透未提供打法。",
-              tips=["紅光閃、藍光彈；帶上你最強的配置"]),
+        ("断魂山", "依游玩顺序", [
+            I("小翠（完成）", ["tale"], "在断魂山找到小翠的父母。", miss="要在打【力者和锯者】之前完成，才会多拿到奖励。"),
+            B("力者和锯者", "主线（两阶段）", PG + "crusher-boss-550x309.jpg",
+              reward="新的主武器；完成小翠支线有额外奖励",
+              tips=["一阶段先锁定锯者打", f"二阶段力者：锤击后接空中 {R}，完美闪避"]),
+            B("连战：旧敌再临", "多名之前的头目同时出现", PG + "puppet-scavenger-2-550x309.jpg",
+              note="之前完成的角色支线越多，这里就会有越多同伴来帮忙。",
+              tips=["每个敌人的打法和原本的头目战相同"]),
+            W("【最后的挽回之地】不归点", "过了这个铃铛就会被锁在最终头目连战里，打完结局才能离开（之后可以回去探索全部区域）。先手动存档。"),
+            B("冷荼", "最终连战", KG + "Fighting-Leng-Tu.jpg", spoil=True, reward="无",
+              tips=["先清召唤物", "注意天上手臂的影子落点", "光球蓄力会把你推开，不用闪"]),
+            B("梦华", "常规结局最终头目", PG + "lady-boss-fight-550x309.jpg", spoil=True,
+              reward="新的主武器与饰品",
+              tips=["旋转光束用跳的或闪避躲开", f"她蓄白色光球、画面变暗之后接 {R}"]),
+            B("真正的最终头目", "只在真结局条件达成时出现", KG + "Zuo-Shang-Boss.jpg", spoil=True, true=True,
+              reward="奖杯【昭昭心与血】",
+              note="攻略站为避免剧透没有提供打法。",
+              tips=["红光闪、蓝光格挡、黑光不要挡；带上你最强的配置"]),
         ]),
     ]))
 
 
 # =====================================================================
-#  RENDERING
+# 输出
 # =====================================================================
 
 def esc(s):
@@ -728,12 +783,12 @@ def esc(s):
 
 def head(title, desc):
     return f"""<!doctype html>
-<html lang="zh-Hant">
+<html lang="zh-Hant-TW">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{esc(title)}</title>
-<meta name="description" content="{esc(desc)}">
+<title>{esc(t(title))}</title>
+<meta name="description" content="{esc(t(desc))}">
 <meta name="referrer" content="no-referrer">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -747,110 +802,96 @@ def head(title, desc):
 def topbar(active):
     links = ['<a href="index.html"%s>目錄</a>' % (' class="on"' if active == "index" else "")]
     for c in CHAPTERS:
-        links.append(f'<a href="{c["id"]}.html"{" class=\"on\"" if c["id"] == active else ""}>{esc(c["title"])}</a>')
+        on = ' class="on"' if c["id"] == active else ""
+        links.append(f'<a href="{c["id"]}.html"{on}>{esc(t(c["title"]))}</a>')
     return f"""<header class="topbar"><div class="wrap">
-<a class="brand" href="index.html"><span class="seal">影</span>影之刃零 攻略<small>PHANTOM BLADE ZERO</small></a>
+<a class="brand" href="index.html"><span class="seal">影</span>影之刃零 攻略</a>
 <nav class="chapnav">{''.join(links)}</nav>
 </div></header>
 """
 
 
 FOOTER = """<footer><div class="wrap">
-<p>非官方粉絲攻略。遊戲畫面與名稱版權屬 S-GAME 所有。物品、頭目名稱使用英文版遊戲名稱。</p>
-<p>截圖來源（外部連結）：地圖截圖 © <a href="https://www.powerpyx.com/phantom-blade-zero-collectibles-guide-100-completion/" target="_blank" rel="noopener">PowerPyx</a>；
-頭目截圖 © <a href="https://www.keengamer.com/articles/guides/phantom-blade-zero-all-bosses-and-their-rewards/" target="_blank" rel="noopener">KeenGamer</a>、
+<p>非官方玩家攻略。遊戲畫面與名稱版權屬 S-GAME 所有。名稱依中文版遊戲（整理自遊民星空等中文攻略），已轉為繁體字。</p>
+<p>截圖來源（外部連結）：<a href="https://www.gamersky.com/tools/guide-map/roadbooks/53" target="_blank" rel="noopener">遊民星空 全收集路線</a>、
+<a href="https://www.gamersky.com/handbook/202610/2235534.shtml" target="_blank" rel="noopener">遊民星空 全BOSS打法</a>、
+<a href="https://www.gamersky.com/handbook/202610/2235544.shtml" target="_blank" rel="noopener">遊民星空 全飾品</a>；
+第五～七章部分地圖 © <a href="https://www.powerpyx.com/phantom-blade-zero-collectibles-guide-100-completion/" target="_blank" rel="noopener">PowerPyx</a>；
+部分頭目截圖 © <a href="https://www.keengamer.com/articles/guides/phantom-blade-zero-all-bosses-and-their-rewards/" target="_blank" rel="noopener">KeenGamer</a>、
 <a href="https://www.pcgamesn.com/phantom-blade-zero/bosses" target="_blank" rel="noopener">PCGamesN</a>。</p>
-<p>資料整理自：<a href="https://game8.co/games/Phantom-Blade-Zero/archives/634952" target="_blank" rel="noopener">Game8</a>、
-<a href="https://allthings.how/phantom-blade-zero-missables/" target="_blank" rel="noopener">AllThingsHow</a>、
-<a href="https://phantombladezerocodex.com/missables" target="_blank" rel="noopener">PBZ Codex</a>、
-<a href="https://grindnstrat.com/phantom-blade-zero-bosses/" target="_blank" rel="noopener">grindnstrat</a>（屬性弱點）、
-<a href="https://www.keengamer.com/articles/guides/phantom-blade-zero-complete-walkthrough-all-quests/" target="_blank" rel="noopener">KeenGamer Walkthrough</a>。
-各站資料偶有出入，以遊戲內實際情況為準。</p>
+<p>資料整理自：遊民星空（全收集路線、全BOSS、全支線、全飾品、全武器、真結局、各區域探索注意事項）、17173、kungfupunk、Phantom Blade Atlas，以及部分英文攻略（Game8、PowerPyx）。
+第六章之後的中文攻略仍在更新，少數名稱標示「待確認」。各站資料偶有出入，以遊戲內為準。</p>
 </div></footer>
 <script src="assets/app.js"></script>
 </body></html>
 """
 
 
-def tag_html(t):
-    label, cls = TAGS[t]
-    return f'<span class="tag {cls}">{esc(label)}</span>'
+def tag_html(k):
+    label, cls = TAGS[k]
+    return f'<span class="tag {cls}">{esc(t(label))}</span>'
 
 
 def shots_html(img, name):
     if not img:
         return ""
-    m, s = img
-    return (f'<div class="shots">'
-            f'<div class="shot" data-zoom="{esc(name)}・地圖位置"><img loading="lazy" data-hide-broken src="{m}" alt="{esc(name)} 地圖位置"><span class="cap">地圖</span></div>'
-            f'<div class="shot" data-zoom="{esc(name)}・實地畫面"><img loading="lazy" data-hide-broken src="{s}" alt="{esc(name)} 實地畫面"><span class="cap">實地</span></div>'
-            f'</div>')
+    cells = "".join(
+        f'<div class="shot" data-zoom="{esc(t(name))}・{cap}"><img loading="lazy" data-hide-broken src="{u}" alt="{esc(t(name))}"><span class="cap">{cap}</span></div>'
+        for u, cap in img[:2])
+    return f'<div class="shots{" one" if len(img) == 1 else ""}">{cells}</div>'
 
 
 def render_item(e, n, eid):
-    tags = e["tags"]
-    filt = " ".join(sorted(set(tags + (["miss"] if e["miss"] else []))))
-    cls = "entry" + (" miss" if ("miss" in tags or e["miss"]) else "")
-    tg = "".join(tag_html(t) for t in tags)
+    tags = list(e["tags"])
     if e["miss"] and "miss" not in tags:
-        tg = tag_html("miss") + tg
-    dl = f'<div class="deadline"><b>死線：</b>{e["miss"]}</div>' if e["miss"] else ""
-    note = f'<p class="note">{e["note"]}</p>' if e["note"] else ""
-    has_img = bool(e["img"])
-    return f"""<div class="{cls}" data-id="{eid}" data-tags="{filt}">
+        tags.insert(0, "miss")
+    cls = "entry" + (" miss" if "miss" in tags else "")
+    tg = "".join(tag_html(k) for k in tags)
+    dl = f'<div class="deadline"><b>注意：</b>{t(e["miss"])}</div>' if e["miss"] else ""
+    note = f'<p class="note">{t(e["note"])}</p>' if e["note"] else ""
+    return f"""<div class="{cls}" data-id="{eid}" data-tags="{' '.join(tags)}">
 <div class="step">{n}</div>
-<div class="card"><div class="item-grid{' has-img' if has_img else ''}">
+<div class="card"><div class="item-grid{' has-img' if e['img'] else ''}">
 {shots_html(e["img"], e["name"])}
 <div class="body"><div class="tags">{tg}</div>
-<h3>{esc(e["name"])}</h3>
-<p class="where">{e["where"]}</p>{note}{dl}
+<h3>{esc(t(e["name"]))}</h3>
+<p class="where">{t(e["where"])}</p>{note}{dl}
 <label class="check"><input type="checkbox"> 已完成</label>
 </div></div></div></div>
 """
 
 
 def render_boss(e, n, eid):
-    sp = " spoiler" if e["spoil"] else ""
-    label = e["label"] or ("可選頭目" if e["opt"] else "頭目")
-    tg = []
-    if e["opt"]:
-        tg.append(tag_html("opt"))
-    if e["true"]:
-        tg.append(tag_html("true"))
-    tagrow = f'<div class="tags">{"".join(tg)}</div>' if tg else ""
-    title = (f'<div class="title"><div class="label">{esc(label)}</div>'
-             f'<h3><span class="{sp.strip()}">{esc(e["name"])}</span>'
-             f'{"<span class=spoil-hint>（點擊顯示）</span>" if e["spoil"] else ""}</h3>'
-             f'<div class="sub">{esc(e["sub"])}</div></div>')
+    sp = "spoiler" if e["spoil"] else ""
+    tg = (tag_html("opt") if e["opt"] else "") + (tag_html("true") if e["true"] else "")
+    tagrow = f'<div class="tags">{tg}</div>' if tg else ""
+    label = "可選頭目" if e["opt"] else "頭目"
+    hint = '<span class="spoil-hint">（點擊顯示）</span>' if e["spoil"] else ""
+    title = (f'<div class="title"><div class="label">{label}</div>'
+             f'<h3><span class="{sp}">{esc(t(e["name"]))}</span>{hint}</h3>'
+             f'<div class="sub">{esc(t(e["sub"]))}</div></div>')
     if e["img"]:
-        hero = (f'<div class="boss-hero" data-zoom="{esc(e["name"]) if not e["spoil"] else ""}">'
-                f'<img class="{sp.strip()}" loading="lazy" data-hide-broken src="{e["img"]}" alt="頭目截圖">{title}</div>')
+        hero = (f'<div class="boss-hero" data-zoom="{"" if e["spoil"] else esc(t(e["name"]))}">'
+                f'<img class="{sp}" loading="lazy" data-hide-broken src="{e["img"]}" alt="頭目截圖">{title}</div>')
     else:
         hero = f'<div class="boss-hero noimg">{title}</div>'
-    kv = []
-    if e["reward"]:
-        kv.append(f'<dt>獎勵</dt><dd>{esc(e["reward"])}</dd>')
-    if e["weak"]:
-        kv.append(f'<dt>弱點</dt><dd class="weak">{esc(e["weak"])}</dd>')
-    if e["resist"]:
-        kv.append(f'<dt>抗性</dt><dd class="resist">{esc(e["resist"])}</dd>')
-    kvh = f'<dl class="kv">{"".join(kv)}</dl>' if kv else ""
-    gear_cls = {"武器": "t-weapon", "Phantom Edge": "t-edge", "飾品": "t-acc", "道具": "t-key", "提示": "t-opt"}
-    gear = "".join(f'<div class="row"><span class="tag {gear_cls.get(k, "t-opt")}">{esc(k)}</span><span>{esc(v)}</span></div>'
+    kvh = f'<dl class="kv"><dt>獎勵</dt><dd>{esc(t(e["reward"]))}</dd></dl>' if e["reward"] else ""
+    gear_cls = {"武器": "t-weapon", "副武器": "t-weapon", "影之武装": "t-edge", "饰品": "t-acc", "药瓶": "t-key", "切换": "t-opt"}
+    gear = "".join(f'<div class="row"><span class="tag {gear_cls.get(k, "t-opt")}">{esc(t(k))}</span><span>{esc(t(v))}</span></div>'
                    for k, v in e["gear"])
-    gearh = f'<h5>推薦配置</h5><div class="loadout">{gear}</div>' if gear else ""
-    note = f'<p class="note" style="margin:0 0 12px">{e["note"]}</p>' if e["note"] else ""
-    tips = "".join(f"<li>{t}</li>" for t in e["tips"])
+    gearh = f'<h5>推薦配裝</h5><div class="loadout">{gear}</div>' if gear else ""
+    note = f'<p class="note" style="margin:0 0 12px">{t(e["note"])}</p>' if e["note"] else ""
+    tips = "".join(f"<li>{t(x)}</li>" for x in e["tips"])
     maph = ""
     if e["map"]:
-        maph = (f'<h5 style="margin-top:6px">地圖位置</h5><div class="mapthumb" data-zoom="{esc(e["name"]) if not e["spoil"] else "頭目"}・地圖位置">'
-                f'<img loading="lazy" data-hide-broken src="{e["map"]}" alt="頭目地圖位置"><span class="cap">地圖</span></div>')
+        maph = (f'<h5 style="margin-top:6px">位置</h5><div class="mapthumb" data-zoom="{"頭目" if e["spoil"] else esc(t(e["name"]))}・位置">'
+                f'<img loading="lazy" data-hide-broken src="{e["map"]}" alt="頭目位置"><span class="cap">位置</span></div>')
     tags = "boss" + (" opt" if e["opt"] else "") + (" true" if e["true"] else "")
     return f"""<div class="entry boss" data-id="{eid}" data-tags="{tags}">
 <div class="step">{n}</div>
 <div class="card">{hero}
 <div class="boss-body">
-<div>{tagrow}{note}<h5>戰術</h5><ul class="tips">{tips}</ul></div>
+<div>{tagrow}{note}<h5>打法要點</h5><ul class="tips">{tips}</ul></div>
 <div>{kvh}{gearh}{maph}<label class="check"><input type="checkbox"> 已擊敗</label></div>
 </div></div></div>
 """
@@ -859,40 +900,40 @@ def render_boss(e, n, eid):
 def render_banner(e):
     cls = "banner info" if e["info"] else "banner"
     body = e["body"] if e["body"].startswith("<") else f"<p>{e['body']}</p>"
-    return f'<div class="entry banner-entry" data-tags="always"><div class="{cls}"><h4>{esc(e["title"])}</h4>{body}</div></div>\n'
+    return f'<div class="entry banner-entry" data-tags="always"><div class="{cls}"><h4>{esc(t(e["title"]))}</h4>{t(body)}</div></div>\n'
 
 
 def counts(ch):
-    m = b = t = 0
+    m = b = n = 0
     for _, _, entries in ch["sections"]:
         for e in entries:
             if e["kind"] == "boss":
                 b += 1
             elif e["kind"] == "item":
-                t += 1
+                n += 1
                 if e["miss"] or "miss" in e["tags"]:
                     m += 1
-    return m, b, t
+    return m, b, n
 
 
 def render_chapter(i, ch):
-    m, b, t = counts(ch)
-    out = [head(f'{ch["title"]} {ch["en"]}｜影之刃零 攻略', ch["lead"]),
+    m, b, n_items = counts(ch)
+    out = [head(f'{ch["title"]}｜影之刃零 攻略', ch["lead"].replace("<b>", "").replace("</b>", "")),
            f'<body data-page="{ch["id"]}">', topbar(ch["id"])]
-    out.append(f"""<section class="hero"><div class="bgimg" style="background-image:url('{ch["cover"]}')"></div>
-<div class="wrap"><div class="kicker">{esc(ch["num"])}</div>
-<h1>{esc(ch["title"])}<span class="en">{esc(ch["en"])}</span></h1>
-<p class="lead">{ch["lead"]}</p>
-<div class="stats"><div class="stat red"><b>{m}</b>錯過不再</div><div class="stat"><b>{b}</b>頭目</div><div class="stat"><b>{t}</b>道具 / 支線</div></div>
+    out.append(f"""<section class="hero"><div class="bgimg"><img src="{ch["cover"]}" alt=""></div>
+<div class="wrap"><div class="kicker">{esc(t(ch["num"]))}</div>
+<h1>{esc(t(ch["title"]))}<span class="en">{esc(t(ch["sub"]))}</span></h1>
+<p class="lead">{t(ch["lead"])}</p>
+<div class="stats"><div class="stat red"><b>{m}</b>錯過不再</div><div class="stat"><b>{b}</b>頭目</div><div class="stat"><b>{n_items}</b>道具／任務</div></div>
 </div></section>
 <div class="toolbar"><div class="wrap">
 <button class="chip on" data-f="all">全部</button>
 <button class="chip" data-f="miss">錯過不再</button>
 <button class="chip" data-f="boss">頭目</button>
 <button class="chip" data-f="weapon">武器</button>
-<button class="chip" data-f="edge">Phantom Edge</button>
+<button class="chip" data-f="edge">影之武裝</button>
 <button class="chip" data-f="acc">飾品</button>
-<button class="chip" data-f="tale">支線</button>
+<button class="chip" data-f="tale">異聞任務</button>
 <button class="chip" data-f="true">真結局</button>
 <span class="spacer"></span>
 <button class="chip" id="hidedone">隱藏已完成</button>
@@ -901,7 +942,7 @@ def render_chapter(i, ch):
 <main><div class="wrap">""")
     n = 0
     for si, (stitle, ssub, entries) in enumerate(ch["sections"]):
-        out.append(f'<div class="section-title"><h2>{esc(stitle)}</h2><span>{esc(ssub)}</span></div><div class="timeline">')
+        out.append(f'<div class="section-title"><h2>{esc(t(stitle))}</h2><span>{esc(t(ssub))}</span></div><div class="timeline">')
         for ei, e in enumerate(entries):
             eid = f"s{si}e{ei}"
             if e["kind"] == "banner":
@@ -913,9 +954,9 @@ def render_chapter(i, ch):
     prev = CHAPTERS[i - 1] if i > 0 else None
     nxt = CHAPTERS[i + 1] if i + 1 < len(CHAPTERS) else None
     pg = '<div class="pager">'
-    pg += (f'<a href="{prev["id"]}.html"><small>← 上一章</small><b>{esc(prev["title"])}</b></a>' if prev
+    pg += (f'<a href="{prev["id"]}.html"><small>← 上一章</small><b>{esc(t(prev["title"]))}</b></a>' if prev
            else '<a href="index.html"><small>← 返回</small><b>目錄</b></a>')
-    pg += (f'<a class="next" href="{nxt["id"]}.html"><small>下一章 →</small><b>{esc(nxt["title"])}</b></a>' if nxt
+    pg += (f'<a class="next" href="{nxt["id"]}.html"><small>下一章 →</small><b>{esc(t(nxt["title"]))}</b></a>' if nxt
            else '<a class="next" href="index.html"><small>返回 →</small><b>目錄</b></a>')
     pg += "</div>"
     out.append(pg + "</div></main>" + FOOTER)
@@ -923,37 +964,37 @@ def render_chapter(i, ch):
 
 
 def render_index():
-    out = [head("影之刃零 攻略｜錯過不再的道具、支線與頭目打法",
-                "Phantom Blade Zero 中文攻略：每章容易錯過的道具、支線、武器，以及每個頭目的打法與推薦配置。"),
+    out = [head("影之刃零 攻略｜错过不再的道具、支线与头目打法",
+                "影之刃零中文攻略：每章容易错过的道具、支线、武器、饰品，以及每个头目的打法与推荐配装。"),
            '<body data-page="index">', topbar("index")]
-    out.append(f"""<section class="hero idx-hero"><div class="bgimg" style="background-image:url('{KG}Phantom-Blade-Zero-Bosses-Cover.jpg')"></div>
-<div class="wrap"><div class="kicker">Phantom Blade Zero · 非官方攻略</div>
-<h1>影之刃零<span class="en">錯過不再的一切，與每個頭目的打法</span></h1>
-<p class="lead">每一章只列出容易忘記、容易忽略、錯過就再也拿不到的道具、支線、武器與飾品，以及頭目的戰術與推薦配置。
-全部依實際遊玩順序排列，並附地圖截圖。盡量不劇透。</p>
-<div class="legend">{tag_html("miss")}{tag_html("weapon")}{tag_html("edge")}{tag_html("acc")}{tag_html("tale")}{tag_html("key")}{tag_html("true")}</div>
+    cover = gb("双蛇夫人-白赤练")[0]
+    out.append(f"""<section class="hero idx-hero"><div class="bgimg"><img src="{cover}" alt=""></div>
+<div class="wrap"><div class="kicker">{t("非官方玩家攻略・中文版名称")}</div>
+<h1>影之刃零<span class="en">{t("错过不再的一切，与每个头目的打法")}</span></h1>
+<p class="lead">{t("每一章只列出容易忘记、容易忽略、错过就再也拿不到的道具、异闻任务、武器、影之武装与饰品，以及每个头目的打法与推荐配装。全部依实际游玩顺序排列，附截图，尽量不剧透。")}</p>
+<div class="legend">{tag_html("miss")}{tag_html("weapon")}{tag_html("edge")}{tag_html("acc")}{tag_html("tale")}{tag_html("purple")}{tag_html("true")}</div>
 </div></section>
 <main><div class="wrap">
 <div class="section-title"><h2>選擇章節</h2><span>依劇情順序</span></div>
 <div class="grid">""")
     for ch in CHAPTERS:
-        m, b, t = counts(ch)
-        lead = html.unescape(ch["lead"]).replace("<b>", "").replace("</b>", "")
+        m, b, n = counts(ch)
+        lead = ch["lead"].replace("<b>", "").replace("</b>", "")
         short = lead.split("。")[0] + "。"
         out.append(f"""<a class="chcard" href="{ch["id"]}.html">
-<div class="img" style="background-image:url('{ch["cover"]}')"><span class="num">{esc(ch["num"])}</span></div>
-<div class="txt"><h3>{esc(ch["title"])}</h3><div class="en">{esc(ch["en"])}</div>
-<p>{esc(short)}</p>
-<div class="meta"><span class="m">錯過不再 {m}</span><span>頭目 {b}</span><span>道具 / 支線 {t}</span></div></div></a>""")
-    out.append("""</div>
-<div class="section-title"><h2>使用方式</h2><span>三個重點</span></div>
+<div class="img"><img loading="lazy" src="{ch["cover"]}" alt=""><span class="num">{esc(t(ch["num"]))}</span></div>
+<div class="txt"><h3>{esc(t(ch["title"]))}</h3><div class="en">{esc(t(ch["sub"]))}</div>
+<p>{esc(t(short))}</p>
+<div class="meta"><span class="m">錯過不再 {m}</span><span>頭目 {b}</span><span>道具／任務 {n}</span></div></div></a>""")
+    out.append(t(f"""</div>
+<div class="section-title"><h2>使用方式</h2><span>先看这里</span></div>
 <div class="how">
-<div><h4>紅色 = 錯過不再</h4><p>紅框卡片都有「死線」，告訴你在哪個頭目 / 事件之前一定要完成。每章開頭也有不歸點提醒。</p></div>
-<div><h4>紅光閃、藍光彈</h4><p>頭目攻擊發出<span class="glint g-red">紅光</span>要完美閃避，<span class="glint g-blue">藍光</span>要彈反。戰術內都用這兩個標記。</p></div>
-<div><h4>打勾記錄進度</h4><p>每張卡片可勾選「已完成」，進度會存在你的瀏覽器裡；上方可以篩選類型或隱藏已完成項目。</p></div>
-<div><h4>防劇透</h4><p>只寫地點與操作，不寫劇情。最終章的頭目名稱與截圖預設模糊，點擊才顯示。</p></div>
+<div><h4>红框 = 错过不再</h4><p>红框卡片都写了“注意”，告诉你在哪个头目或事件之前一定要完成。每章也有不归点提醒。</p></div>
+<div><h4>红光闪、蓝光挡、黑光别挡</h4><p>头目招式发出{R}要完美闪避，{BL}要完美格挡，{BK}格挡会直接清空杀气，只能闪避。</p></div>
+<div><h4>打勾记录进度</h4><p>每张卡片可以勾选“已完成”，进度存在你的浏览器里；上方可以筛选类型或隐藏已完成。</p></div>
+<div><h4>防剧透</h4><p>只写地点与操作，不写剧情。最终章的头目名称与截图预设模糊，点击才显示。</p></div>
 </div>
-</div></main>""" + FOOTER)
+</div></main>""") + FOOTER)
     return "\n".join(out)
 
 
