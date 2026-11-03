@@ -6,8 +6,8 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IMGDIR = os.path.join(BASE, 'site', 'assets', 'images')
 
 PLATES = {
-    'sanmian': ('三面魔偶', 'hero-creek.jpg', '壹'),
-    'jinmianju': ('金面具', 'hero-creek.jpg', '壹'),
+    'sanmian': ('三張臉的詭異魔偶', 'hero-creek.jpg', '壹'),
+    'jinmianju': ('金面具黑衣人', 'hero-creek.jpg', '壹'),
     'muxiaokui': ('沐小葵', 'hero-lu.jpg', '參'),
     'xieqiudong': ('謝秋冬', 'hero-pang.jpg', '肆'),
     'guhe': ('古鶴', 'hero-lake.jpg', '陸'),

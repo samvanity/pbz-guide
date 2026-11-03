@@ -220,7 +220,7 @@ CH1 = {
             "reward": "殘鋼刃（出血）"
         },
         {
-            "name": "三面魔偶", "title": "聖母像裂縫・隱藏頭目", "loc": "聖母像裂縫・鈴鐺下方",
+            "name": "三張臉的詭異魔偶", "title": "聖母像裂縫・隱藏頭目", "loc": "聖母像裂縫・鈴鐺下方",
             "img": "boss-sanmian.jpg", "miss": True,
             "phases": "單階段・後期還有一次",
             "tactics": [
@@ -270,7 +270,7 @@ CH1 = {
             "reward": "追命鎖鐮（抓鉤）"
         },
         {
-            "name": "金面具", "title": "龍柱挑戰・第一次", "loc": "悲泣溪谷龍柱",
+            "name": "金面具黑衣人", "title": "龍柱挑戰・第一次", "loc": "悲泣溪谷龍柱",
             "img": "boss-jinmianju.jpg", "miss": True,
             "phases": "單階段・後續還有三次",
             "tactics": [
@@ -452,7 +452,7 @@ CH2 = {
             "reward": "白蟒赤練、破損的幻術琵琶"
         },
         {
-            "name": "金面具", "title": "龍柱挑戰・第二次", "loc": "血色森林龍柱",
+            "name": "金面具黑衣人", "title": "龍柱挑戰・第二次", "loc": "血色森林龍柱",
             "img": "boss-jinmianju.jpg", "miss": True,
             "phases": "單階段",
             "tactics": [
