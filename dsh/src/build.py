@@ -343,7 +343,7 @@ def index_page():
   <div class="wrap">
     <div class="section-head">
       <h2><small>章節</small>選擇章節</h2>
-      <p>依主線順序排列。卡片上的「錯過不再」是本章會永久消失的條目數量，不是收集品總數。</p>
+      <p>依主線順序排列。卡片上的「錯過不再」是本章會永久消失的條目數量，不是收集品總數。圖片只放確認對題的實機畫面，其餘以章節圖與名刺呈現。</p>
     </div>
     <div class="chapter-grid">{cards}</div>
   </div>
