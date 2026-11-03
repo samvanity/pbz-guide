@@ -268,11 +268,11 @@ def chapter_page(ch, idx):
     <div class="back"><a href="index.html">← 回到章節索引</a></div>
   </aside>
   <main class="chapter-content">
-    {notice_html}
     <details class="toc-mobile">
       <summary>本章目錄・時間軸／頭目／檢查</summary>
       <div class="toc-mobile-links">{toc_links}</div>
     </details>
+    {notice_html}
     <section id="route">
       <div class="content-head"><h2><small>路線</small>本章路線</h2><span class="count">{miss_count} 個易錯過・{boss_count} 個頭目</span></div>
       {map_block}
