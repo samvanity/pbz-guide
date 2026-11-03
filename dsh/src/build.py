@@ -240,8 +240,9 @@ def chapter_page(ch, idx):
   <div class="seal">{e(notice['seal'])}</div>
   <div><h3>{e(notice['title'])}</h3><p>{notice['text']}</p></div>
 </div>"""
+    hero_class = "chapter-hero plate-hero" if ch["hero"].startswith("chapter-bg-") else "chapter-hero"
     return head(f"{ch['name']}｜影之刃零 攻略", ch["tagline"]) + f"""
-<section class="chapter-hero">
+<section class="{hero_class}">
   <div class="bg">{img(ch['hero'], 'hero-creek.jpg', ch['name'])}</div>
   <div class="wrap inner">
     <div class="chapter-kicker"><span class="n">{e(ch['num'])}</span><span>{e(ch['sub'])}</span></div>
@@ -297,7 +298,9 @@ def index_page():
     cards = ""
     for ch in CHAPTERS:
         miss = sum(1 for s in ch["stops"] if s.get("miss"))
-        if ch["hero"].startswith("chapter-card-"):
+        if ch["hero"].startswith("chapter-bg-"):
+            card_img = ch["hero"].replace("chapter-bg-", "chapter-card-", 1)
+        elif ch["hero"].startswith("chapter-card-"):
             card_img = ch["hero"]
         elif ch["hero"].startswith("chapter-"):
             card_img = ch["hero"].replace("chapter-", "chapter-card-", 1)

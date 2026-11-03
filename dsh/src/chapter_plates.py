@@ -71,4 +71,12 @@ for cid, name, sub, num, tagline, color in CHAPTERS:
     cd.text((1088, 66), num, font=font(42), fill=(200, 120, 105))
     cd.line([(64, 120), (520, 120)], fill=(170, 145, 95), width=1)
     card.save(os.path.join(IMGDIR, f'chapter-card-{cid}.jpg'), 'JPEG', quality=90, optimize=True)
+
+    # 章節頁主視覺：無文字，只留背景與印章，讓 HTML 標題疊上去
+    bg = ink_bg(1920, 1080, color)
+    bd = ImageDraw.Draw(bg)
+    bd.text((1180, 260), num, font=font(620), fill=(32, 31, 34))
+    bd.rectangle([1700, 90, 1810, 200], outline=(150, 55, 46), width=3)
+    bd.text((1734, 108), num, font=font(64), fill=(200, 120, 105))
+    bg.save(os.path.join(IMGDIR, f'chapter-bg-{cid}.jpg'), 'JPEG', quality=90, optimize=True)
     print('chapter', cid, name)

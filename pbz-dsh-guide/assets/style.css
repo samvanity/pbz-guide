@@ -495,3 +495,6 @@ body.show-spoilers .spoiler{filter:none;opacity:1}
 
 
 
+
+.chapter-hero.plate-hero .bg img{filter:none;opacity:.92}
+.chapter-hero.plate-hero .bg::after{background:linear-gradient(180deg,rgba(8,8,10,.55),rgba(8,8,10,.2) 35%,rgba(8,8,10,.78) 82%,var(--ink)),linear-gradient(90deg,rgba(8,8,10,.82),transparent 70%)}
