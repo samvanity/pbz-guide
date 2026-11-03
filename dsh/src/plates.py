@@ -19,6 +19,7 @@ PLATES = {
     'moyuan': ('魔淵', 'hero-soul.jpg', '終'),
     'lizhe': ('力者與鋸者', 'hero-soul.jpg', '終'),
     'biyuan': ('畢遠', 'hero-lu.jpg', '參'),
+    'bifeng': ('橫刀畢峰', 'hero-prologue.jpg', '柒'),
 }
 
 def font(size):

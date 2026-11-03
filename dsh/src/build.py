@@ -134,7 +134,7 @@ def stop_html(i, s, chapter):
 </article>"""
 
 PLATE_KEYS = {"sanmian", "jinmianju", "muxiaokui", "xieqiudong", "guhe", "yuzan",
-              "yumian", "zuoshang-true", "duanchang", "huangxing", "moyuan", "lizhe", "biyuan"}
+              "yumian", "zuoshang-true", "duanchang", "huangxing", "moyuan", "lizhe", "biyuan", "bifeng"}
 
 def boss_html(i, b, chapter):
     miss = b.get("miss")
