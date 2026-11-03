@@ -113,9 +113,9 @@ def badge(t, miss=False):
 def stop_html(i, s, chapter):
     miss = bool(s.get("miss"))
     img_html = ""
-    if s.get("img"):
+    if s.get("img") and s["img"] in SAFE_STOP_IMAGES:
         alt = s["title"]
-        img_html = f'<figure class="stop-img">{img(s["img"], chapter["hero"], alt)}<figcaption><span>{e(alt)}</span><span>實機畫面</span></figcaption></figure>'
+        img_html = f'<figure class="stop-img">{img(s["img"], chapter["hero"], alt)}<figcaption><span>{e(alt)}</span><span>取得位置實景</span></figcaption></figure>'
     gains = "".join(f"<span>{e(g)}</span>" for g in s.get("gain", []))
     return f"""
 <article class="tl-item {'miss' if miss else ''}" id="s{i}">
@@ -133,15 +133,18 @@ def stop_html(i, s, chapter):
   </div>
 </article>"""
 
+BOSS_PHOTOS = {"cangang", "pengmeng", "ahua", "zhuming"}
 PLATE_KEYS = {"sanmian", "jinmianju", "muxiaokui", "xieqiudong", "guhe", "yuzan",
-              "yumian", "zuoshang-true", "duanchang", "huangxing", "moyuan", "lizhe", "biyuan", "bifeng"}
+              "yumian", "zuoshang-true", "duanchang", "huangxing", "moyuan", "lizhe",
+              "biyuan", "bifeng", "zuoshang", "yucong"}
+SAFE_STOP_IMAGES = set()
 
 def boss_html(i, b, chapter):
     miss = b.get("miss")
     tactics = "".join(f"<li>{x}</li>" for x in b["tactics"])
     lo = b["loadout"]
     key = os.path.splitext(b.get("img") or "")[0].replace("boss-", "")
-    kind = "頭目名刺" if key in PLATE_KEYS else "實機畫面"
+    kind = "頭目實機" if key in BOSS_PHOTOS else "頭目名刺"
     tag = f'<span class="tag{" miss" if miss else ""}">{kind}{"・會錯過" if miss else ""}</span>'
     return f"""
 <article class="boss-card" id="b{i}">
@@ -276,7 +279,7 @@ def chapter_page(ch, idx):
     </section>
     <section id="bosses">
       <div class="content-head"><h2><small>頭目</small>頭目攻略</h2><span class="count">{boss_count} 個</span></div>
-      <p class="small muted" style="margin:-8px 0 20px">圖片為攻略實機畫面、所在區域實景或頭目名刺；部分頭目沒有適合的單獨截圖，以名刺卡呈現。</p>
+      <p class="small muted" style="margin:-8px 0 20px">只保留確認對應的頭目實機畫面；其餘一律用名刺卡，避免圖不對題。</p>
       {bosses_html}
     </section>
     <section id="checklist">
@@ -294,9 +297,16 @@ def index_page():
     cards = ""
     for ch in CHAPTERS:
         miss = sum(1 for s in ch["stops"] if s.get("miss"))
+        if ch["hero"].startswith("chapter-card-"):
+            card_img = ch["hero"]
+        elif ch["hero"].startswith("chapter-"):
+            card_img = ch["hero"].replace("chapter-", "chapter-card-", 1)
+        else:
+            card_img = ch["hero"]
+        card_cls = "chapter-card plate-card reveal" if ch["hero"].startswith("chapter-") else "chapter-card reveal"
         cards += f"""
-<a class="chapter-card reveal" href="{ch['id']}.html">
-  {img(ch['hero'], 'hero-creek.jpg', ch['name'])}
+<a class="{card_cls}" href="{ch['id']}.html">
+  {img(card_img, 'hero-creek.jpg', ch['name'])}
   <div class="cc-top"><span class="cc-num">章節 {e(ch['num'])}</span><span class="cc-tag">{e(ch['sub'])}</span></div>
   <div class="cc-body">
     <h3>{e(ch['name'])}</h3>
@@ -382,9 +392,11 @@ def bosses_page():
     tiles = ""
     for ch in CHAPTERS:
         for b in ch["bosses"]:
+            key = os.path.splitext(b.get("img") or "")[0].replace("boss-", "")
+            kind = "頭目實機" if key in BOSS_PHOTOS else "名刺"
             tiles += f"""
 <a class="boss-tile" href="{ch['id']}.html#b{ch['bosses'].index(b)+1}" data-chapter="{ch['id']}" data-miss="{1 if b.get('miss') else 0}">
-  <div class="ph">{img(b['img'], ch['hero'], b['name'])}</div>
+  <div class="ph">{img(b['img'], ch['hero'], b['name'])}<span class="tile-tag">{kind}</span></div>
   <div class="bd"><div class="ch">{e(ch['name'])} · {e(b['title'])}</div><h3>{e(b['name'])}</h3><p>{e(b['loc'])}</p></div>
   <span class="go">→</span>
 </a>"""
