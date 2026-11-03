@@ -435,13 +435,13 @@ def missables_page():
   <h1>錯過清單</h1>
   <p>只列會永久消失的東西。每一項都標了位置與斷點；勾選會存在瀏覽器，出發前掃一遍就夠。</p>
   <div class="miss-summary">
-    <div><b>{total}</b><span>本章期限定條目</span></div>
+    <div><b>{total}</b><span>期限定條目</span></div>
     <div><b>5</b><span>關鍵斷點</span></div>
     <div><b>0</b><span>劇透（預設關閉）</span></div>
   </div>
 </div></section>
 <div class="wrap" style="padding:64px 0 100px">
-  <div class="section-head"><h2><small>期限S</small>五個斷點</h2><p>先記這五個時間，比記一百個道具位置有用。</p></div>
+  <div class="section-head"><h2><small>期限</small>五個斷點</h2><p>先記這五個時間，比記一百個道具位置有用。</p></div>
   {deadlines}
   <div style="height:40px"></div>
   {rows}
